@@ -3,17 +3,17 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-<meta name="theme-color" content="#120c2a" />
-<meta name="description" content="Мерж-Империя: сливай предметы, строй империю, выполняй заказы." />
-<title>Мерж-Империя</title>
+<meta name="theme-color" content="#140d28" />
+<meta name="description" content="Дрифт-Легенда: гоняй, уходи в занос, прокачивай машину." />
+<title>Дрифт-Легенда</title>
 <style>
   /* Critical boot styles: inlined so the loader paints before the bundle arrives. */
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #120c2a; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #140d28; }
   body {
     font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-    color: #efeaff;
+    color: #f2eefc;
     -webkit-tap-highlight-color: transparent;
     -webkit-user-select: none; user-select: none;
     touch-action: manipulation;
@@ -21,40 +21,42 @@
   #boot {
     position: fixed; inset: 0; display: flex; flex-direction: column;
     align-items: center; justify-content: center; gap: 14px; z-index: 999;
-    background: radial-gradient(120% 80% at 50% 0%, #2b1c5c 0%, #120c2a 60%, #0b0720 100%);
+    background: linear-gradient(180deg, #1a1040 0%, #6b2f6a 55%, #ff8a4c 100%);
   }
-  .boot-logo { font-size: 72px; animation: bob 1.8s ease-in-out infinite; }
-  .boot-title { font-weight: 900; letter-spacing: 2px; font-size: 22px; opacity: .92; }
-  .boot-bar { width: 220px; height: 8px; border-radius: 99px; background: #ffffff1f; overflow: hidden; }
-  .boot-bar i { display: block; height: 100%; width: 8%; border-radius: 99px; background: linear-gradient(90deg,#ffd76a,#ff8fd6); transition: width .25s ease; }
-  .boot-hint { font-size: 13px; opacity: .6; min-height: 18px; }
-  @keyframes bob { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-10px) } }
+  #boot::after {
+    content: ''; position: absolute; inset: 0;
+    background: radial-gradient(70% 45% at 50% 78%, #ffd08a55, transparent 70%);
+  }
+  .boot-logo { font-size: 64px; position: relative; animation: slide 2.2s ease-in-out infinite; }
+  .boot-title {
+    font-weight: 900; letter-spacing: 3px; font-size: 24px; position: relative;
+    text-shadow: 0 3px 20px #0008;
+  }
+  .boot-bar { width: 220px; height: 8px; border-radius: 99px; background: #00000040; overflow: hidden; position: relative; }
+  .boot-bar i { display: block; height: 100%; width: 8%; border-radius: 99px; background: linear-gradient(90deg,#ffe08a,#ffffff); transition: width .25s ease; }
+  .boot-hint { font-size: 13px; opacity: .8; min-height: 18px; position: relative; }
+  @keyframes slide { 0%,100% { transform: translateX(-12px) rotate(-3deg) } 50% { transform: translateX(12px) rotate(3deg) } }
 </style>
-
 </head>
 <body>
-  <!-- Boot screen is inline so something is on screen before the bundle parses. -->
   <div id="boot">
-    <div class="boot-logo">🏰</div>
-    <div class="boot-title">МЕРЖ-ИМПЕРИЯ</div>
+    <div class="boot-logo">🏎️</div>
+    <div class="boot-title">ДРИФТ-ЛЕГЕНДА</div>
     <div class="boot-bar"><i id="boot-fill"></i></div>
     <div class="boot-hint" id="boot-hint">Загрузка…</div>
   </div>
 
-  <div id="app" hidden>
-    <header id="hud"></header>
-    <main id="stage">
-      <canvas id="board"></canvas>
-      <div id="board-overlay"></div>
-    </main>
-    <section id="orders"></section>
-    <nav id="dock"></nav>
+  <canvas id="gl"></canvas>
+
+  <div id="ui">
+    <section id="menu" class="screen" hidden></section>
+    <section id="hud" class="screen" hidden></section>
   </div>
 
   <div id="modal-root"></div>
   <div id="toast-root"></div>
   <div id="fx-root"></div>
 
-  <script type="module" src="/src/main.ts"></script>
+  <script type="module" src="/src/drift/main.ts"></script>
 </body>
 </html>
