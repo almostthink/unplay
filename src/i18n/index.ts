@@ -1,0 +1,457 @@
+/**
+ * Tiny i18n. Yandex ships the game to RU/EN/TR storefronts, so those three
+ * languages are bundled; anything else falls back to English.
+ */
+
+export type Lang = 'ru' | 'en' | 'tr';
+
+type Dict = Record<string, string>;
+
+const ru: Dict = {
+  'app.title': 'Мерж-Империя',
+  'boot.sdk': 'Связь с Яндекс.Играми…',
+  'boot.save': 'Загружаем империю…',
+  'boot.ready': 'Готово!',
+  'boot.tapToStart': 'Нажмите, чтобы играть',
+
+  'res.coins': 'Монеты',
+  'res.gems': 'Кристаллы',
+  'res.level': 'Ур.',
+
+  'gen.tap': 'Нажми на генератор',
+  'gen.empty': 'Заряды кончились',
+  'gen.refillIn': 'Заряд через {t}',
+  'gen.locked': 'Откроется на {lvl} уровне',
+
+  'board.full': 'Доска заполнена! Слейте предметы или расширьте поле.',
+  'board.merged': 'Слияние!',
+  'board.maxTier': 'Это максимум в цепочке!',
+
+  'order.title': 'Заказы',
+  'order.deliver': 'Выдать',
+  'order.reroll': 'Сменить',
+  'order.done': 'Заказ выполнен!',
+  'order.x2': 'Награда х2',
+  'order.new': 'Новый заказ',
+  'order.emptySlot': 'Свободно',
+
+  'quest.title': 'Задания дня',
+  'quest.sub': 'Обновляются каждый день в полночь',
+  'quest.claim': 'Забрать',
+  'quest.done': 'Готово',
+  'quest.merge': 'Сделать {n} слияний',
+  'quest.orders': 'Выполнить {n} заказов',
+  'quest.spawn': 'Создать {n} предметов',
+  'quest.tier': 'Получить предмет {n} уровня',
+  'quest.coins': 'Заработать {n} монет',
+  'quest.allDone': 'Все задания дня выполнены. Возвращайтесь завтра!',
+
+  'shop.title': 'Лавка',
+  'shop.sub': 'Ускорь развитие империи',
+  'shop.energyPack': 'Полный заряд генераторов',
+  'shop.energyPackDesc': 'Мгновенно восполняет все генераторы',
+  'shop.expand': 'Расширить поле',
+  'shop.expandDesc': 'Открывает ещё один ряд ячеек',
+  'shop.expandMax': 'Поле максимально расширено',
+  'shop.gems': 'Кристаллы',
+  'shop.free': 'Бесплатно',
+  'shop.watchAd': 'Смотреть',
+  'shop.noAds': 'Отключить рекламу',
+  'shop.noAdsDesc': 'Убирает баннер и межстраничную рекламу навсегда',
+  'shop.noAdsOwned': 'Реклама отключена. Спасибо!',
+  'shop.starter': 'Набор новичка',
+  'shop.starterDesc': 'Кристаллы, монеты и ускорение генераторов',
+  'shop.unavailable': 'Покупки недоступны в этой версии',
+  'shop.purchased': 'Покупка получена!',
+  'shop.purchaseFailed': 'Покупка отменена',
+  'shop.dailyLimit': 'Лимит на сегодня исчерпан',
+
+  'upg.title': 'Генераторы',
+  'upg.sub': 'Улучшай, чтобы получать больше и чаще',
+  'upg.level': 'Ур. {n}',
+  'upg.max': 'МАКС',
+  'upg.capacity': 'Зарядов: {n}',
+  'upg.speed': 'Заряд за {t}',
+  'upg.quality': 'Предметы до {n} ур.',
+  'upg.unlockAt': 'С {lvl} уровня',
+  'upg.unlock': 'Открыть',
+
+  'daily.title': 'Ежедневная награда',
+  'daily.sub': 'Заходи каждый день, награда растёт',
+  'daily.claim': 'Забрать награду',
+  'daily.claimX2': 'Удвоить за рекламу',
+  'daily.claimed': 'Уже забрано. Приходи завтра!',
+  'daily.streak': 'Серия: {n} дн.',
+
+  'offline.title': 'С возвращением!',
+  'offline.sub': 'Вас не было {t}. Империя работала:',
+  'offline.collect': 'Забрать',
+  'offline.collectX2': 'Забрать х2',
+  'offline.charges': 'зарядов',
+
+  'lb.title': 'Таблица лидеров',
+  'lb.sub': 'Лучшие правители по силе империи',
+  'lb.you': 'Вы',
+  'lb.unavailable': 'Таблица доступна только внутри Яндекс.Игр',
+  'lb.login': 'Войти, чтобы попасть в таблицу',
+  'lb.loading': 'Загружаем…',
+
+  'settings.title': 'Настройки',
+  'settings.sound': 'Звук',
+  'settings.music': 'Музыка',
+  'settings.vibro': 'Вибрация',
+  'settings.lang': 'Язык',
+  'settings.banner': 'Баннер снизу',
+  'settings.rate': 'Оценить игру',
+  'settings.shortcut': 'Ярлык на рабочий стол',
+  'settings.reset': 'Сбросить прогресс',
+  'settings.resetConfirm': 'Весь прогресс будет удалён. Точно?',
+  'settings.resetYes': 'Да, удалить',
+  'settings.version': 'Версия {v}',
+
+  'levelup.title': 'Уровень {n}!',
+  'levelup.sub': 'Империя растёт',
+  'levelup.reward': 'Награда за уровень',
+  'levelup.unlocked': 'Открыто: {name}',
+  'levelup.ok': 'Отлично!',
+
+  'ad.loading': 'Загружаем рекламу…',
+  'ad.failed': 'Реклама не загрузилась, попробуйте позже',
+  'ad.noReward': 'Награда не начислена: ролик не досмотрен',
+  'ad.cooldown': 'Подождите немного',
+
+  'common.close': 'Закрыть',
+  'common.ok': 'Понятно',
+  'common.cancel': 'Отмена',
+  'common.on': 'Вкл',
+  'common.off': 'Выкл',
+  'common.free': 'Бесплатно',
+  'common.soon': 'Скоро',
+  'common.locked': 'Закрыто',
+  'common.notEnough': 'Не хватает средств',
+
+  'dock.orders': 'Заказы',
+  'dock.shop': 'Лавка',
+  'dock.upgrades': 'Улучшения',
+  'dock.quests': 'Задания',
+  'dock.top': 'Топ',
+  'dock.daily': 'Награда',
+
+  'tutor.1': 'Нажмите на шахту, чтобы добыть камень',
+  'tutor.2': 'Перетащите одинаковые предметы друг на друга',
+  'tutor.3': 'Отлично! Слияние даёт предмет выше уровнем',
+  'tutor.4': 'Соберите предметы для заказа и получите монеты',
+
+  'time.d': '{n} д',
+  'time.h': '{n} ч',
+  'time.m': '{n} мин',
+  'time.s': '{n} с',
+};
+
+const en: Dict = {
+  'app.title': 'Merge Empire',
+  'boot.sdk': 'Connecting to Yandex.Games…',
+  'boot.save': 'Loading your empire…',
+  'boot.ready': 'Ready!',
+  'boot.tapToStart': 'Tap to play',
+
+  'res.coins': 'Coins',
+  'res.gems': 'Gems',
+  'res.level': 'Lv.',
+
+  'gen.tap': 'Tap a generator',
+  'gen.empty': 'Out of charges',
+  'gen.refillIn': 'Next charge in {t}',
+  'gen.locked': 'Unlocks at level {lvl}',
+
+  'board.full': 'Board is full! Merge items or expand the field.',
+  'board.merged': 'Merge!',
+  'board.maxTier': 'Top of the chain!',
+
+  'order.title': 'Orders',
+  'order.deliver': 'Deliver',
+  'order.reroll': 'Reroll',
+  'order.done': 'Order complete!',
+  'order.x2': 'Double reward',
+  'order.new': 'New order',
+  'order.emptySlot': 'Empty',
+
+  'quest.title': 'Daily tasks',
+  'quest.sub': 'Reset every day at midnight',
+  'quest.claim': 'Claim',
+  'quest.done': 'Done',
+  'quest.merge': 'Make {n} merges',
+  'quest.orders': 'Complete {n} orders',
+  'quest.spawn': 'Create {n} items',
+  'quest.tier': 'Reach a tier {n} item',
+  'quest.coins': 'Earn {n} coins',
+  'quest.allDone': 'All daily tasks done. Come back tomorrow!',
+
+  'shop.title': 'Shop',
+  'shop.sub': 'Speed up your empire',
+  'shop.energyPack': 'Full generator refill',
+  'shop.energyPackDesc': 'Instantly refills every generator',
+  'shop.expand': 'Expand the board',
+  'shop.expandDesc': 'Unlocks one more row of cells',
+  'shop.expandMax': 'Board fully expanded',
+  'shop.gems': 'Gems',
+  'shop.free': 'Free',
+  'shop.watchAd': 'Watch',
+  'shop.noAds': 'Remove ads',
+  'shop.noAdsDesc': 'Removes the banner and interstitials forever',
+  'shop.noAdsOwned': 'Ads removed. Thank you!',
+  'shop.starter': 'Starter pack',
+  'shop.starterDesc': 'Gems, coins and a generator boost',
+  'shop.unavailable': 'Purchases are unavailable in this build',
+  'shop.purchased': 'Purchase granted!',
+  'shop.purchaseFailed': 'Purchase cancelled',
+  'shop.dailyLimit': 'Daily limit reached',
+
+  'upg.title': 'Generators',
+  'upg.sub': 'Upgrade for more items, more often',
+  'upg.level': 'Lv. {n}',
+  'upg.max': 'MAX',
+  'upg.capacity': 'Charges: {n}',
+  'upg.speed': 'A charge every {t}',
+  'upg.quality': 'Items up to tier {n}',
+  'upg.unlockAt': 'From level {lvl}',
+  'upg.unlock': 'Unlock',
+
+  'daily.title': 'Daily reward',
+  'daily.sub': 'Come back every day, rewards grow',
+  'daily.claim': 'Claim reward',
+  'daily.claimX2': 'Double with an ad',
+  'daily.claimed': 'Already claimed. See you tomorrow!',
+  'daily.streak': 'Streak: {n} days',
+
+  'offline.title': 'Welcome back!',
+  'offline.sub': 'You were away for {t}. Your empire kept working:',
+  'offline.collect': 'Collect',
+  'offline.collectX2': 'Collect x2',
+  'offline.charges': 'charges',
+
+  'lb.title': 'Leaderboard',
+  'lb.sub': 'Strongest empires',
+  'lb.you': 'You',
+  'lb.unavailable': 'The leaderboard only works inside Yandex.Games',
+  'lb.login': 'Sign in to join the leaderboard',
+  'lb.loading': 'Loading…',
+
+  'settings.title': 'Settings',
+  'settings.sound': 'Sound',
+  'settings.music': 'Music',
+  'settings.vibro': 'Vibration',
+  'settings.lang': 'Language',
+  'settings.banner': 'Bottom banner',
+  'settings.rate': 'Rate the game',
+  'settings.shortcut': 'Add a desktop shortcut',
+  'settings.reset': 'Reset progress',
+  'settings.resetConfirm': 'All progress will be erased. Are you sure?',
+  'settings.resetYes': 'Yes, erase',
+  'settings.version': 'Version {v}',
+
+  'levelup.title': 'Level {n}!',
+  'levelup.sub': 'Your empire grows',
+  'levelup.reward': 'Level reward',
+  'levelup.unlocked': 'Unlocked: {name}',
+  'levelup.ok': 'Nice!',
+
+  'ad.loading': 'Loading ad…',
+  'ad.failed': 'Ad failed to load, try again later',
+  'ad.noReward': 'No reward: the video was not watched',
+  'ad.cooldown': 'Please wait a moment',
+
+  'common.close': 'Close',
+  'common.ok': 'Got it',
+  'common.cancel': 'Cancel',
+  'common.on': 'On',
+  'common.off': 'Off',
+  'common.free': 'Free',
+  'common.soon': 'Soon',
+  'common.locked': 'Locked',
+  'common.notEnough': 'Not enough resources',
+
+  'dock.orders': 'Orders',
+  'dock.shop': 'Shop',
+  'dock.upgrades': 'Upgrades',
+  'dock.quests': 'Tasks',
+  'dock.top': 'Top',
+  'dock.daily': 'Reward',
+
+  'tutor.1': 'Tap the mine to dig up a stone',
+  'tutor.2': 'Drag matching items onto each other',
+  'tutor.3': 'Nice! A merge gives you the next tier',
+  'tutor.4': 'Collect the order items and get paid',
+
+  'time.d': '{n}d',
+  'time.h': '{n}h',
+  'time.m': '{n}m',
+  'time.s': '{n}s',
+};
+
+const tr: Dict = {
+  'app.title': 'Birleştirme İmparatorluğu',
+  'boot.sdk': 'Yandex.Games bağlanıyor…',
+  'boot.save': 'İmparatorluk yükleniyor…',
+  'boot.ready': 'Hazır!',
+  'boot.tapToStart': 'Oynamak için dokun',
+
+  'res.coins': 'Altın',
+  'res.gems': 'Elmas',
+  'res.level': 'Sv.',
+
+  'gen.tap': 'Bir üreticiye dokun',
+  'gen.empty': 'Şarj bitti',
+  'gen.refillIn': 'Sonraki şarj: {t}',
+  'gen.locked': '{lvl}. seviyede açılır',
+
+  'board.full': 'Tahta dolu! Birleştir ya da alanı genişlet.',
+  'board.merged': 'Birleşti!',
+  'board.maxTier': 'Zincirin sonu!',
+
+  'order.title': 'Siparişler',
+  'order.deliver': 'Teslim et',
+  'order.reroll': 'Değiştir',
+  'order.done': 'Sipariş tamam!',
+  'order.x2': 'Çift ödül',
+  'order.new': 'Yeni sipariş',
+  'order.emptySlot': 'Boş',
+
+  'quest.title': 'Günlük görevler',
+  'quest.sub': 'Her gece yenilenir',
+  'quest.claim': 'Al',
+  'quest.done': 'Tamam',
+  'quest.merge': '{n} birleştirme yap',
+  'quest.orders': '{n} sipariş tamamla',
+  'quest.spawn': '{n} eşya üret',
+  'quest.tier': '{n}. seviye eşya elde et',
+  'quest.coins': '{n} altın kazan',
+  'quest.allDone': 'Günün görevleri bitti. Yarın görüşürüz!',
+
+  'shop.title': 'Dükkân',
+  'shop.sub': 'İmparatorluğunu hızlandır',
+  'shop.energyPack': 'Tam şarj',
+  'shop.energyPackDesc': 'Tüm üreticileri anında doldurur',
+  'shop.expand': 'Tahtayı genişlet',
+  'shop.expandDesc': 'Bir sıra daha hücre açar',
+  'shop.expandMax': 'Tahta tamamen açıldı',
+  'shop.gems': 'Elmas',
+  'shop.free': 'Ücretsiz',
+  'shop.watchAd': 'İzle',
+  'shop.noAds': 'Reklamları kaldır',
+  'shop.noAdsDesc': 'Banner ve geçiş reklamlarını kalıcı kaldırır',
+  'shop.noAdsOwned': 'Reklamlar kapalı. Teşekkürler!',
+  'shop.starter': 'Başlangıç paketi',
+  'shop.starterDesc': 'Elmas, altın ve üretici hızlandırması',
+  'shop.unavailable': 'Bu sürümde satın alma yok',
+  'shop.purchased': 'Satın alma tamam!',
+  'shop.purchaseFailed': 'Satın alma iptal edildi',
+  'shop.dailyLimit': 'Günlük limit doldu',
+
+  'upg.title': 'Üreticiler',
+  'upg.sub': 'Daha çok ve daha sık eşya için yükselt',
+  'upg.level': 'Sv. {n}',
+  'upg.max': 'MAKS',
+  'upg.capacity': 'Şarj: {n}',
+  'upg.speed': '{t} başına şarj',
+  'upg.quality': '{n}. seviyeye kadar eşya',
+  'upg.unlockAt': '{lvl}. seviyeden',
+  'upg.unlock': 'Aç',
+
+  'daily.title': 'Günlük ödül',
+  'daily.sub': 'Her gün gel, ödül büyüsün',
+  'daily.claim': 'Ödülü al',
+  'daily.claimX2': 'Reklamla ikiye katla',
+  'daily.claimed': 'Zaten alındı. Yarın gel!',
+  'daily.streak': 'Seri: {n} gün',
+
+  'offline.title': 'Tekrar hoş geldin!',
+  'offline.sub': '{t} yoktun. İmparatorluk çalıştı:',
+  'offline.collect': 'Topla',
+  'offline.collectX2': 'x2 topla',
+  'offline.charges': 'şarj',
+
+  'lb.title': 'Liderlik tablosu',
+  'lb.sub': 'En güçlü imparatorluklar',
+  'lb.you': 'Sen',
+  'lb.unavailable': 'Tablo yalnızca Yandex.Games içinde çalışır',
+  'lb.login': 'Tabloya girmek için giriş yap',
+  'lb.loading': 'Yükleniyor…',
+
+  'settings.title': 'Ayarlar',
+  'settings.sound': 'Ses',
+  'settings.music': 'Müzik',
+  'settings.vibro': 'Titreşim',
+  'settings.lang': 'Dil',
+  'settings.banner': 'Alt banner',
+  'settings.rate': 'Oyunu puanla',
+  'settings.shortcut': 'Masaüstü kısayolu',
+  'settings.reset': 'İlerlemeyi sıfırla',
+  'settings.resetConfirm': 'Tüm ilerleme silinecek. Emin misin?',
+  'settings.resetYes': 'Evet, sil',
+  'settings.version': 'Sürüm {v}',
+
+  'levelup.title': 'Seviye {n}!',
+  'levelup.sub': 'İmparatorluğun büyüyor',
+  'levelup.reward': 'Seviye ödülü',
+  'levelup.unlocked': 'Açıldı: {name}',
+  'levelup.ok': 'Harika!',
+
+  'ad.loading': 'Reklam yükleniyor…',
+  'ad.failed': 'Reklam yüklenemedi, sonra dene',
+  'ad.noReward': 'Ödül yok: video izlenmedi',
+  'ad.cooldown': 'Biraz bekle',
+
+  'common.close': 'Kapat',
+  'common.ok': 'Tamam',
+  'common.cancel': 'İptal',
+  'common.on': 'Açık',
+  'common.off': 'Kapalı',
+  'common.free': 'Ücretsiz',
+  'common.soon': 'Yakında',
+  'common.locked': 'Kilitli',
+  'common.notEnough': 'Yeterli kaynak yok',
+
+  'dock.orders': 'Siparişler',
+  'dock.shop': 'Dükkân',
+  'dock.upgrades': 'Yükseltme',
+  'dock.quests': 'Görevler',
+  'dock.top': 'Top',
+  'dock.daily': 'Ödül',
+
+  'tutor.1': 'Taş çıkarmak için madene dokun',
+  'tutor.2': 'Aynı eşyaları üst üste sürükle',
+  'tutor.3': 'Güzel! Birleştirme bir üst seviye verir',
+  'tutor.4': 'Sipariş eşyalarını topla ve altın kazan',
+
+  'time.d': '{n}g',
+  'time.h': '{n}s',
+  'time.m': '{n}d',
+  'time.s': '{n}sn',
+};
+
+const DICTS: Record<Lang, Dict> = { ru, en, tr };
+
+let current: Lang = 'ru';
+
+export function setLang(lang: string | undefined): Lang {
+  const short = (lang || '').slice(0, 2).toLowerCase();
+  current = short === 'ru' || short === 'tr' ? short : short === 'en' ? 'en' : 'en';
+  document.documentElement.lang = current;
+  return current;
+}
+
+export function getLang(): Lang {
+  return current;
+}
+
+/** Translate `key`, substituting `{name}` placeholders from `params`. */
+export function t(key: string, params?: Record<string, string | number>): string {
+  const raw = DICTS[current][key] ?? ru[key] ?? en[key] ?? key;
+  if (!params) return raw;
+  return raw.replace(/\{(\w+)\}/g, (m, name: string) =>
+    name in params ? String(params[name]) : m,
+  );
+}
+
+export const LANG_LABELS: Record<Lang, string> = { ru: 'Русский', en: 'English', tr: 'Türkçe' };
