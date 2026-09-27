@@ -1,196 +1,92 @@
-# 🕹️ unplay
+# Mail Access Checker
 
-Две законченные игры для **Яндекс.Игр** в одном репозитории. Общий
-платформенный слой, отдельные сборки, отдельные архивы для загрузки.
+A small tool for checking IMAP/SMTP access to email accounts **you own**,
+reading credentials from a local `email:pass` (or `email;pass`) text file.
+Built for the case where you have a large personal inventory of mailboxes
+and don't want to log into each one by hand to confirm it still works.
 
-| Игра | Путь | Архив | Размер |
-|---|---|---|---|
-| 🏎️ **Дрифт-Легенда** — 3D гонка с дрифтом | `/` | `build/drift.zip` | ~164 КБ |
-| 🏰 **Мерж-Империя** — merge/idle | `/merge/` | `build/merge.zip` | ~29 КБ |
+## What it does
 
-Обе игры полностью функциональны: прогресс, облачные сохранения, реклама,
-внутриигровые покупки, таблица лидеров, локализация ru/en/tr.
+- Reads one or more input files, one `email:pass` per line.
+- For each account, opens a direct IMAP and/or SMTP connection to the
+  provider and attempts to log in.
+- Sorts results into a timestamped output folder:
+  - `success.txt` — login worked
+  - `invalid.txt` — login was rejected (wrong/expired password, or the
+    provider requires an app password / 2FA step your plain password can't
+    satisfy)
+  - `error.txt` — connection/timeout/unknown errors. **Not proof the
+    credential is bad** — these can be transient network issues or a
+    server-side hiccup.
+- Ships with server presets for Gmail, Outlook/Hotmail/Live, Yahoo, AOL,
+  iCloud, Mail.ru, Yandex, GMX, and Zoho. Unknown/custom domains fall back
+  to the conventional `imap.<domain>` / `smtp.<domain>` guess.
 
----
+## What it deliberately does NOT do
 
-## Запуск
+- No proxy support of any kind — connections go out directly. This is a
+  personal-inventory checker, not a distributed scraping tool.
+- No CAPTCHA solving, no anti-detection, no rate-limit evasion.
+- No bucket categories built around defeating provider defenses (no
+  `locked` / `rate_limited` / `captcha` sorting) — just success / invalid /
+  error, which is what "is my account still reachable" actually needs.
+- Default concurrency is modest (20 threads) and capped at 100, not
+  thousands.
+
+## Usage
 
 ```bash
-npm install
-npm run dev            # http://localhost:5173 (гонка), /merge/ (мерж)
-npm run build          # обе игры в dist/
-npm run preview        # проверить продакшен-сборку
-npm run zip            # build/drift.zip и build/merge.zip
-npm run typecheck      # строгая проверка типов
-npm run test:physics   # регрессионный тест физики дрифта (нужен npm run dev)
+pip install -r requirements.txt   # only needed to build the .exe; the
+                                   # script itself has no dependencies
+python mail_checker.py --input accounts.txt
 ```
 
-Вне фрейма Яндекса SDK не загружается, и это нормально: реклама сразу выдаёт
-награду, покупки скрыты, таблица лидеров показывает заглушку. Игры полностью
-играбельны локально.
+Options:
 
----
+| Flag         | Default | Notes                                          |
+|--------------|---------|-------------------------------------------------|
+| `--input`    | —       | Path to an `email:pass` file. Repeatable.       |
+| `--protocol` | `imap`  | `imap`, `smtp`, or `both`                       |
+| `--threads`  | `20`    | 1–100 concurrent workers                        |
+| `--timeout`  | `20`    | Per-connection timeout, seconds (5–120)         |
+| `--output`   | `results` | Base folder; a `YYYY-MM-DD_HH-MM-SS` run dir is created inside it |
 
-## 🏎️ Дрифт-Легенда
+Example checking both protocols with more concurrency:
 
-3D-гонка на Three.js. Бесконечная процедурная трасса, аркадная физика заноса,
-чекпоинты добавляют время.
-
-### Геймплей
-- **Управление:** держите левую или правую половину экрана, чтобы поворачивать.
-  На клавиатуре A/D или стрелки, пробел ручник, Shift нитро.
-  Газ автоматический, порог входа минимальный.
-- **Дрифт** не спецрежим, а следствие физики: тело машины поворачивается
-  первым, и это само по себе создаёт боковую скорость, которую затем гасит
-  сцепление шин. Меньше сцепления или зажатый ручник, и занос держится.
-- **Множитель** растёт за каждую секунду непрерывного заноса, до x8.
-  Очки заносятся на счёт, когда занос заканчивается, и сгорают при аварии.
-- **Нитро** копится от дрифта и подобранных монет.
-- **Таймер** 32 секунды, каждый чекпоинт добавляет 9, авария отнимает 3.
-
-### Прогресс
-- 4 машины с разными характеристиками, от «Стартера» до «Прототипа».
-- 4 ветки улучшений по 6 уровней: двигатель, разгон, резина, баллон нитро.
-- 8 цветов покраски, три открыты сразу.
-- Уровни водителя с наградами.
-
-### Графика
-- Стилизованный low-poly закат: PBR-материалы, лак на кузове (clearcoat),
-  мягкие тени, объёмный туман, процедурное небо с солнечным ореолом.
-- Постобработка: UnrealBloom с порогом 1.0 (светятся только реальные
-  источники: фары, стопы, ворота чекпоинтов, диск солнца), виньетка,
-  тонмаппинг ACES.
-- Дым из-под колёс, следы шин на асфальте, искры от столкновений,
-  пламя из выхлопа на нитро, крен кузова в занос, FOV-кик на скорости.
-- Три уровня качества с автоопределением по устройству, переключаются
-  в настройках без перезапуска.
-- Ни одной текстуры и ни одной 3D-модели в сборке: вся геометрия строится
-  из примитивов, весь звук синтезируется через WebAudio.
-
-### Монетизация
-- **Rewarded:** продолжить заезд после таймера (до 2 раз), удвоить монеты
-  за заезд, бесплатные монеты в лавке (дневной лимит), удвоить ежедневную награду.
-- **Interstitial:** только между заездами, не чаще одного раза на 3 заезда,
-  с собственным кулдауном поверх кулдауна SDK.
-- **Баннер** скрывается на время заезда, чтобы не перекрывать дорогу.
-- **Покупки:** наборы монет, набор новичка, отключение рекламы.
-
----
-
-## 🏰 Мерж-Империя
-
-Merge/idle игра на Canvas. Сливайте одинаковые предметы, поднимайте уровень,
-выполняйте заказы.
-
-- Поле 6 колонок, от 4 до 7 рядов, ряды открываются за монеты.
-- 4 цепочки по 9 уровней с генераторами, у которых копятся заряды.
-- Заказы, ежедневные задания, сундук с серией на 7 дней, оффлайн-доход до 4 часов.
-- Rewarded на кристаллы, монеты, перезарядку генераторов, смену заказа,
-  х2 к оффлайну и к ежедневному сундуку.
-
----
-
-## Публикация в Яндекс.Играх
-
-1. **Создайте черновик игры** в [консоли разработчика](https://yandex.ru/dev/games/).
-
-2. **Заведите таблицу лидеров.** Техническое имя должно совпадать с
-   `LEADERBOARD_NAME`:
-
-   | Игра | Имя | Сортировка |
-   |---|---|---|
-   | Дрифт-Легенда | `drift` | по убыванию, число |
-   | Мерж-Империя | `empire` | по убыванию, число |
-
-3. **Заведите товары.** ID настраиваются в `PRODUCTS` в `config.ts`
-   соответствующей игры.
-
-   Дрифт-Легенда:
-
-   | ID | Тип | Выдаёт |
-   |---|---|---|
-   | `coins_small` | расходуемый | 5 000 монет |
-   | `coins_medium` | расходуемый | 30 000 монет |
-   | `coins_large` | расходуемый | 120 000 монет |
-   | `starter_pack` | расходуемый | 15 000 монет |
-   | `no_ads` | нерасходуемый | отключает баннер и межстраничную рекламу |
-
-   Мерж-Империя: `gems_small`, `gems_medium`, `gems_large`, `starter_pack`,
-   `no_ads`. Количество выдаваемого настраивается в `PRODUCT_COINS` и
-   `PRODUCT_GEMS`.
-
-   Если товары не заведены, раздел покупок просто не показывается,
-   игра не ломается.
-
-4. **Соберите архивы** и загрузите нужный:
-
-   ```bash
-   npm run zip
-   ```
-
-   В корне каждого архива лежит `index.html`, как требует платформа.
-
-5. **Перед модерацией проверьте:**
-   - `LoadingAPI.ready()` вызывается сразу после загрузки (уже сделано).
-   - Реклама не прерывает заезд и не показывается в первые секунды.
-   - Звук глушится на время рекламы (уже сделано).
-   - Игра работает и в портретной, и в альбомной ориентации.
-
----
-
-## Настройка баланса
-
-Код трогать не нужно, вся экономика вынесена в конфиги.
-
-**Гонка, `src/drift/config.ts`:**
-
-```ts
-export const START_TIME = 32;        // секунд на старте
-export const CHECKPOINT_TIME = 9;    // добавляет чекпоинт
-export const DRIFT_MULT_MAX = 8;     // потолок множителя
-export const COINS_PER_SCORE = 0.035;// монет за очко
-export const CARS = [ /* характеристики машин */ ];
+```bash
+python mail_checker.py --input accounts1.txt --input accounts2.txt \
+    --protocol both --threads 40 --timeout 25
 ```
 
-Ощущение машины задают четыре числа в `CARS`: `topSpeed`, `accel`, `grip`,
-`steer`. После правки прогоните `npm run test:physics`: тест проверяет, что
-лёгкий поворот держит сцепление, резкий уходит в занос, ручник усиливает его,
-а на выходе из поворота машина восстанавливает скорость.
+## A note on Gmail / Outlook and 2FA
 
-**Мерж, `src/merge/config.ts` и `src/merge/items.ts`:** кривая уровней,
-стоимость апгрейдов и рядов, награды за рекламу, цепочки предметов.
+If an account has 2-Step Verification / Modern Auth enabled, the real
+account password will not work for plain IMAP/SMTP login — the provider
+requires an **app password** or OAuth token instead. Such accounts will
+show up in `invalid.txt` or `error.txt` even though the account itself is
+fine and the password is correct for the web login. That's expected
+provider behavior, not a bug in this tool.
 
----
+## Building the standalone Windows .exe
 
-## Структура
+A GitHub Actions workflow (`.github/workflows/build-exe.yml`) builds
+`mail_checker.exe` on `windows-latest` automatically on every push that
+touches `mail_checker.py`, and can also be triggered manually from the
+**Actions** tab (`workflow_dispatch`). Download the artifact named
+`mail_checker-windows-exe` from a completed run.
 
-```
-index.html            страница гонки
-merge/index.html      страница мерж-игры
-src/
-├── platform/         общее для обеих игр
-│   ├── yandex.ts     обёртка Yandex Games SDK, всё защищено от падений
-│   ├── i18n.ts       движок локализации, словари регистрируют игры
-│   ├── fx.ts         всплывающие числа, частицы, тосты
-│   └── util.ts       форматирование чисел и времени
-├── drift/            3D-гонка
-│   ├── main.ts       загрузка, режимы меню и заезда, игровой цикл
-│   ├── scene.ts      рендерер, свет, небо, постобработка, уровни качества
-│   ├── track.ts      процедурная трасса, рельеф, препятствия, чекпоинты
-│   ├── car.ts        модель машины и физика аркадного дрифта
-│   ├── race.ts       сессия заезда: камера, очки, столкновения, таймер
-│   ├── effects.ts    дым, следы шин, искры
-│   ├── input.ts      тач и клавиатура
-│   ├── garage.ts     машины, улучшения, покраска
-│   ├── config.ts     весь баланс
-│   └── ui/           меню, HUD, экраны
-└── merge/            merge-игра (та же раскладка)
-tests/
-└── drift-physics.mjs регрессионный тест физики дрифта
+To build it yourself locally on Windows:
+
+```powershell
+pip install pyinstaller
+pyinstaller --onefile --console --name mail_checker mail_checker.py
+# -> dist\mail_checker.exe
 ```
 
----
+Then run it from a terminal:
 
-## Лицензия
+```powershell
+mail_checker.exe --input accounts.txt --protocol imap --threads 20
+```
 
-MIT
+## Only use this on accounts you own or are authorized to check.

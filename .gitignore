@@ -1,7 +1,9 @@
-node_modules/
-dist/
+__pycache__/
+*.pyc
 build/
-*.log
+dist/
+*.spec
+results/
 .DS_Store
 .vscode/
 .idea/

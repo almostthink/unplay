@@ -1,0 +1,32 @@
+name: Build mail_checker.exe
+
+on:
+  push:
+    branches: [ "**" ]
+    paths:
+      - "mail_checker.py"
+      - "requirements.txt"
+      - ".github/workflows/build-exe.yml"
+  workflow_dispatch: {}
+
+jobs:
+  build-windows-exe:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install PyInstaller
+        run: pip install pyinstaller
+
+      - name: Build single-file exe
+        run: pyinstaller --onefile --console --name mail_checker mail_checker.py
+
+      - name: Upload exe artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mail_checker-windows-exe
+          path: dist/mail_checker.exe
