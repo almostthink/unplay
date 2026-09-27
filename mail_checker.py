@@ -9,33 +9,65 @@ reading credentials from local `email:pass` (or `email;pass`) text files.
 Intended use: confirming that accounts in your own inventory are still
 reachable, so you don't have to log into each one by hand.
 
+Proxy support exists for one reason: providers like Google/Microsoft rate
+limit and sometimes throw transient auth errors when many login attempts
+in a row come from a single IP - which can make perfectly good accounts look
+"invalid" if you're checking a large personal inventory from one machine.
+Routing connections through a list of proxies spreads that load out.
+
 What this tool does NOT do, by design:
-  - No proxy rotation / proxy support of any kind (direct connections only).
-  - No CAPTCHA handling, no anti-detection, no rate-limit evasion.
+  - No CAPTCHA handling, no anti-detection, no "make this look human" logic.
   - No response-category buckets built for evading provider defenses
-    (locked / rate_limited / captcha style sorting). Results are simply
-    success / invalid / error, which is what "did my login work" needs.
+    (no separate locked/rate_limited/captcha files). Results are simply
+    success / invalid / error - error messages that look rate-limit-related
+    are labelled as such in error.txt so you know to re-check them later,
+    but they're not hidden in their own evasion-flavored bucket.
   - No huge default thread counts. Concurrency is capped modestly so a run
     behaves like a person checking their own accounts faster, not like a
     stuffing tool hammering a provider.
+  - A proxy is only ever retried into on an ambiguous connection/network
+    error. A clean "wrong password" response is never retried - rotating
+    IPs to keep hammering a login that's genuinely rejected is exactly the
+    behavior this tool is not for.
 
 Usage:
     python mail_checker.py --input accounts.txt [options]
 
-    --input PATH        One or more input files (email:pass or email;pass
-                         per line). Repeat --input for multiple files.
+    --input PATH          One or more input files (email:pass or email;pass
+                           per line). Repeat --input for multiple files.
     --protocol {imap,smtp,both}   Which protocol to test (default: imap)
-    --threads N          Concurrent workers, 1-100 (default: 20)
-    --timeout N          Per-connection timeout in seconds (default: 20)
-    --output DIR         Base output directory (default: ./results)
+    --threads N            Concurrent workers, 1-100 (default: 20)
+    --timeout N            Per-connection timeout in seconds (default: 20)
+    --output DIR           Base output directory (default: ./results)
+    --proxy-file PATH       Optional proxy list, one per line (see below).
+                            Omit for direct connections.
+    --proxy-retries N        Max attempts per account when an attempt hits a
+                            connection/network error (rotates to the next
+                            proxy each retry). Default 2. Ignored for a
+                            clean auth success/failure - those never retry.
+
+Proxy list format (one per line, blank lines and lines starting with # are
+skipped):
+    host:port                          -> treated as SOCKS5, no auth
+    host:port:user:pass                -> SOCKS5 with auth
+    user:pass:host:port                -> SOCKS5 with auth
+    socks4://host:port
+    socks5://user:pass@host:port
+    http://user:pass@host:port
+    https://user:pass@host:port
+
+With a proxy file supplied, each connection attempt draws the next proxy
+from the list round-robin, so load is spread across all of them rather than
+hammering one. Requires the `PySocks` package (see requirements.txt).
 
 Output:
     A results/YYYY-MM-DD_HH-MM-SS/ directory is created per run with:
         success.txt   - email:pass that logged in successfully
         invalid.txt    - email:pass:reason for authentication failures
-        error.txt      - email:pass:reason for connection/timeout/unknown
-                         errors (NOT proof the credential is bad - these
-                         are often transient or a server-side block)
+        error.txt      - email:pass:reason for connection/timeout/proxy/
+                         unknown errors (NOT proof the credential is bad -
+                         these are often transient, a server-side block, or
+                         provider-side rate limiting)
 
 Notes on providers:
     Gmail, Outlook/Hotmail/Live and most modern providers require an
@@ -48,6 +80,8 @@ Notes on providers:
 import argparse
 import concurrent.futures
 import imaplib
+import itertools
+import re
 import smtplib
 import socket
 import ssl
@@ -57,6 +91,11 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+
+try:
+    import socks  # PySocks - only required if a --proxy-file is used
+except ImportError:
+    socks = None
 
 # --- Known provider server maps -------------------------------------------------
 # host, port for IMAP (SSL) and SMTP (SSL/STARTTLS handled per-provider)
@@ -78,6 +117,143 @@ PROVIDER_MAP = {
     "gmx.net":        {"imap": ("imap.gmx.net", 993),         "smtp": ("smtp.gmx.net", 465)},
     "zoho.com":       {"imap": ("imap.zoho.com", 993),        "smtp": ("smtp.zoho.com", 465)},
 }
+
+PROXY_SCHEME_RE = re.compile(
+    r"^(socks4|socks5|http|https)://(?:([^:@/]+):([^@/]*)@)?([^:@/]+):(\d+)/?$", re.I
+)
+
+
+# --- Proxy parsing & pool ---------------------------------------------------
+
+def _socks_type(scheme: str):
+    scheme = scheme.lower()
+    if scheme == "socks4":
+        return socks.SOCKS4
+    if scheme == "socks5":
+        return socks.SOCKS5
+    if scheme in ("http", "https"):
+        return socks.HTTP
+    raise ValueError(scheme)
+
+
+def parse_proxy_line(line: str):
+    """Parse one proxy-list line into {type, host, port, user, pass} or None."""
+    line = line.strip()
+    if not line or line.startswith("#"):
+        return None
+
+    m = PROXY_SCHEME_RE.match(line)
+    if m:
+        scheme, user, pw, host, port = m.groups()
+        return {"type": _socks_type(scheme), "host": host, "port": int(port), "user": user, "pass": pw}
+
+    parts = line.split(":")
+    if len(parts) == 2 and parts[1].isdigit():
+        host, port = parts
+        return {"type": socks.SOCKS5, "host": host, "port": int(port), "user": None, "pass": None}
+    if len(parts) == 4:
+        a, b, c, d = parts
+        if b.isdigit():  # host:port:user:pass
+            return {"type": socks.SOCKS5, "host": a, "port": int(b), "user": c, "pass": d}
+        if d.isdigit():  # user:pass:host:port
+            return {"type": socks.SOCKS5, "host": c, "port": int(d), "user": a, "pass": b}
+    return None
+
+
+def load_proxies(path: str):
+    if socks is None:
+        print("[!] --proxy-file was given but PySocks is not installed. "
+              "Run: pip install PySocks", file=sys.stderr)
+        sys.exit(1)
+    proxies = []
+    p = Path(path)
+    if not p.is_file():
+        print(f"[!] Proxy file not found: {path}", file=sys.stderr)
+        sys.exit(1)
+    with p.open("r", encoding="utf-8", errors="ignore") as f:
+        for i, raw in enumerate(f, start=1):
+            parsed = parse_proxy_line(raw)
+            if parsed is None:
+                stripped = raw.strip()
+                if stripped and not stripped.startswith("#"):
+                    print(f"[!] Skipping unrecognized proxy on line {i}: {stripped}", file=sys.stderr)
+                continue
+            proxies.append(parsed)
+    return proxies
+
+
+class ProxyPool:
+    """Thread-safe round-robin over a proxy list. Empty pool = direct connections."""
+
+    def __init__(self, proxies):
+        self.proxies = proxies
+        self._cycle_lock = threading.Lock()
+        self._cycle = itertools.cycle(proxies) if proxies else None
+
+    def __bool__(self):
+        return bool(self.proxies)
+
+    def __len__(self):
+        return len(self.proxies)
+
+    def next(self):
+        if not self._cycle:
+            return None
+        with self._cycle_lock:
+            return next(self._cycle)
+
+
+def proxy_label(proxy):
+    if not proxy:
+        return "direct"
+    return f"{proxy['host']}:{proxy['port']}"
+
+
+# --- Proxy-aware IMAP/SMTP connections --------------------------------------
+
+def _connect_via_proxy(host, port, proxy, timeout):
+    sock = socks.socksocket()
+    sock.set_proxy(proxy["type"], proxy["host"], proxy["port"],
+                    username=proxy.get("user") or None, password=proxy.get("pass") or None)
+    if timeout:
+        sock.settimeout(timeout)
+    sock.connect((host, port))
+    return sock
+
+
+class ProxiedIMAP4SSL(imaplib.IMAP4_SSL):
+    def __init__(self, host, port, timeout, proxy):
+        self.proxy = proxy
+        super().__init__(host=host, port=port, timeout=timeout)
+
+    def _create_socket(self, timeout):
+        if not self.proxy:
+            return super()._create_socket(timeout)
+        raw = _connect_via_proxy(self.host, self.port, self.proxy, timeout)
+        return self.context.wrap_socket(raw, server_hostname=self.host)
+
+
+class ProxiedSMTP(smtplib.SMTP):
+    def __init__(self, host, port, timeout, proxy):
+        self.proxy = proxy
+        super().__init__(host=host, port=port, timeout=timeout)
+
+    def _get_socket(self, host, port, timeout):
+        if not self.proxy:
+            return super()._get_socket(host, port, timeout)
+        return _connect_via_proxy(host, port, self.proxy, timeout)
+
+
+class ProxiedSMTPSSL(smtplib.SMTP_SSL):
+    def __init__(self, host, port, timeout, proxy):
+        self.proxy = proxy
+        super().__init__(host=host, port=port, timeout=timeout)
+
+    def _get_socket(self, host, port, timeout):
+        if not self.proxy:
+            return super()._get_socket(host, port, timeout)
+        raw = _connect_via_proxy(host, port, self.proxy, timeout)
+        return self.context.wrap_socket(raw, server_hostname=self._host)
 
 
 @dataclass
@@ -141,20 +317,32 @@ def servers_for(email: str):
     }
 
 
-def check_imap(account: Account, timeout: int):
+RATE_LIMIT_HINTS = ("too many", "rate limit", "try again later", "temporarily", "throttl")
+
+
+def _tag_if_rate_limited(message: str) -> str:
+    low = message.lower()
+    if any(hint in low for hint in RATE_LIMIT_HINTS):
+        return f"{message} [looks rate-limit related - re-check later]"
+    return message
+
+
+def check_imap(account: Account, timeout: int, proxy=None):
     host, port = servers_for(account.email)["imap"]
+    where = f"({host}:{port} via {proxy_label(proxy)})"
     try:
-        conn = imaplib.IMAP4_SSL(host, port, timeout=timeout)
+        conn = ProxiedIMAP4SSL(host, port, timeout, proxy)
     except (socket.timeout, socket.gaierror, ConnectionRefusedError, ssl.SSLError, OSError) as e:
-        return Result(account, "error", f"imap connect failed ({host}:{port}): {e}")
+        kind = "proxy" if proxy else "connect"
+        return Result(account, "error", f"imap {kind} failed {where}: {e}")
     try:
         conn.login(account.email, account.password)
         conn.logout()
-        return Result(account, "success", "imap login ok")
+        return Result(account, "success", f"imap login ok {where}")
     except imaplib.IMAP4.error as e:
-        return Result(account, "invalid", f"imap auth failed: {e}")
+        return Result(account, "invalid", f"imap auth failed: {_tag_if_rate_limited(str(e))}")
     except (socket.timeout, OSError) as e:
-        return Result(account, "error", f"imap error: {e}")
+        return Result(account, "error", f"imap error {where}: {e}")
     finally:
         try:
             conn.shutdown()
@@ -162,23 +350,25 @@ def check_imap(account: Account, timeout: int):
             pass
 
 
-def check_smtp(account: Account, timeout: int):
+def check_smtp(account: Account, timeout: int, proxy=None):
     host, port = servers_for(account.email)["smtp"]
+    where = f"({host}:{port} via {proxy_label(proxy)})"
     try:
         if port == 465:
-            conn = smtplib.SMTP_SSL(host, port, timeout=timeout)
+            conn = ProxiedSMTPSSL(host, port, timeout, proxy)
         else:
-            conn = smtplib.SMTP(host, port, timeout=timeout)
+            conn = ProxiedSMTP(host, port, timeout, proxy)
             conn.starttls()
     except (socket.timeout, socket.gaierror, ConnectionRefusedError, ssl.SSLError, OSError) as e:
-        return Result(account, "error", f"smtp connect failed ({host}:{port}): {e}")
+        kind = "proxy" if proxy else "connect"
+        return Result(account, "error", f"smtp {kind} failed {where}: {e}")
     try:
         conn.login(account.email, account.password)
-        return Result(account, "success", "smtp login ok")
+        return Result(account, "success", f"smtp login ok {where}")
     except smtplib.SMTPAuthenticationError as e:
-        return Result(account, "invalid", f"smtp auth failed: {e}")
+        return Result(account, "invalid", f"smtp auth failed: {_tag_if_rate_limited(str(e))}")
     except (smtplib.SMTPException, socket.timeout, OSError) as e:
-        return Result(account, "error", f"smtp error: {e}")
+        return Result(account, "error", f"smtp error {where}: {e}")
     finally:
         try:
             conn.quit()
@@ -186,19 +376,32 @@ def check_smtp(account: Account, timeout: int):
             pass
 
 
-def check_account(account: Account, protocol: str, timeout: int):
-    if protocol == "imap":
-        return check_imap(account, timeout)
-    if protocol == "smtp":
-        return check_smtp(account, timeout)
-    # both: success requires both to succeed; report the more specific failure.
-    imap_res = check_imap(account, timeout)
-    if imap_res.bucket != "success":
-        return imap_res
-    smtp_res = check_smtp(account, timeout)
-    if smtp_res.bucket != "success":
-        return smtp_res
-    return Result(account, "success", "imap+smtp login ok")
+def check_account(account: Account, protocol: str, timeout: int, proxy_pool: ProxyPool, max_retries: int):
+    """Check an account, rotating to the next proxy only on ambiguous
+    connection/network errors. A definitive success or a clean auth
+    rejection is returned immediately and is never retried."""
+    attempts = max(1, max_retries)
+    last = None
+    for attempt in range(attempts):
+        proxy = proxy_pool.next() if proxy_pool else None
+
+        if protocol == "imap":
+            res = check_imap(account, timeout, proxy)
+        elif protocol == "smtp":
+            res = check_smtp(account, timeout, proxy)
+        else:  # both
+            res = check_imap(account, timeout, proxy)
+            if res.bucket == "success":
+                res = check_smtp(account, timeout, proxy)
+                if res.bucket == "success":
+                    res = Result(account, "success", f"imap+smtp login ok via {proxy_label(proxy)}")
+
+        last = res
+        if res.bucket in ("success", "invalid"):
+            return res
+        if not proxy_pool or len(proxy_pool) <= 1:
+            break
+    return last
 
 
 def main():
@@ -208,10 +411,21 @@ def main():
     ap.add_argument("--threads", type=int, default=20, help="Concurrent workers (1-100, default 20)")
     ap.add_argument("--timeout", type=int, default=20, help="Per-connection timeout in seconds (default 20)")
     ap.add_argument("--output", default="results", help="Base output directory (default: ./results)")
+    ap.add_argument("--proxy-file", default=None,
+                     help="Optional proxy list (one per line). Omit for direct connections.")
+    ap.add_argument("--proxy-retries", type=int, default=2,
+                     help="Max attempts per account on connection/network errors, rotating proxies (default 2)")
     args = ap.parse_args()
 
     threads = max(1, min(100, args.threads))
     timeout = max(5, min(120, args.timeout))
+    proxy_retries = max(1, min(10, args.proxy_retries))
+
+    proxies = load_proxies(args.proxy_file) if args.proxy_file else []
+    if args.proxy_file and not proxies:
+        print("[!] Proxy file given but no usable proxies were parsed from it.", file=sys.stderr)
+        sys.exit(1)
+    proxy_pool = ProxyPool(proxies)
 
     accounts = parse_accounts(args.input)
     if not accounts:
@@ -229,7 +443,9 @@ def main():
     counters = Counters()
 
     total = len(accounts)
+    proxy_note = f"Proxies={len(proxy_pool)} (round-robin)" if proxy_pool else "Proxies=off (direct)"
     print(f"[*] Loaded {total} accounts. Protocol={args.protocol} Threads={threads} Timeout={timeout}s")
+    print(f"[*] {proxy_note}")
     print(f"[*] Output: {run_dir}")
 
     start = time.time()
@@ -237,7 +453,7 @@ def main():
     done_lock = threading.Lock()
 
     def worker(acc):
-        return check_account(acc, args.protocol, timeout)
+        return check_account(acc, args.protocol, timeout, proxy_pool, proxy_retries)
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=threads) as pool:
         futures = {pool.submit(worker, acc): acc for acc in accounts}

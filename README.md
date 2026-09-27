@@ -22,14 +22,46 @@ and don't want to log into each one by hand to confirm it still works.
   iCloud, Mail.ru, Yandex, GMX, and Zoho. Unknown/custom domains fall back
   to the conventional `imap.<domain>` / `smtp.<domain>` guess.
 
+## Proxy support
+
+If you're checking a large inventory from one machine, providers like
+Google/Microsoft can rate-limit or throw transient auth errors purely
+because of *how many* login attempts came from your one IP in a short
+window — which makes perfectly good accounts look broken. `--proxy-file`
+spreads connections across a proxy list (round-robin) to avoid that.
+
+```
+python mail_checker.py --input accounts.txt --proxy-file proxies.txt
+```
+
+Proxy list format, one per line (`#` comments and blank lines are skipped):
+
+```
+host:port                          # SOCKS5, no auth
+host:port:user:pass                # SOCKS5 with auth
+user:pass:host:port                # SOCKS5 with auth
+socks4://host:port
+socks5://user:pass@host:port
+http://user:pass@host:port
+https://user:pass@host:port
+```
+
+Requires `PySocks` (`pip install -r requirements.txt`). Leave `--proxy-file`
+unset for direct connections.
+
+`--proxy-retries` (default 2) controls how many times an account is retried
+through a *different* proxy — but only on an ambiguous connection/network
+error. A clean "wrong password" response is never retried: rotating IPs to
+keep hammering a login that's genuinely rejected is not what this is for.
+
 ## What it deliberately does NOT do
 
-- No proxy support of any kind — connections go out directly. This is a
-  personal-inventory checker, not a distributed scraping tool.
-- No CAPTCHA solving, no anti-detection, no rate-limit evasion.
+- No CAPTCHA solving, no anti-detection, no "make this look human" logic.
 - No bucket categories built around defeating provider defenses (no
-  `locked` / `rate_limited` / `captcha` sorting) — just success / invalid /
-  error, which is what "is my account still reachable" actually needs.
+  separate `locked` / `rate_limited` / `captcha` files) — just success /
+  invalid / error. Error messages that look rate-limit related are tagged
+  as such inside `error.txt` so you know to re-check them later, rather
+  than hidden in their own evasion-flavored bucket.
 - Default concurrency is modest (20 threads) and capped at 100, not
   thousands.
 
@@ -50,6 +82,8 @@ Options:
 | `--threads`  | `20`    | 1–100 concurrent workers                        |
 | `--timeout`  | `20`    | Per-connection timeout, seconds (5–120)         |
 | `--output`   | `results` | Base folder; a `YYYY-MM-DD_HH-MM-SS` run dir is created inside it |
+| `--proxy-file` | *(none)* | Optional proxy list — see **Proxy support** below |
+| `--proxy-retries` | `2` | Retries per account on network errors only, rotating proxies |
 
 Example checking both protocols with more concurrency:
 

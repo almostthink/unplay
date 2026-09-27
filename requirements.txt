@@ -1,5 +1,6 @@
-# mail_checker.py uses only the Python standard library (imaplib, smtplib,
-# ssl, socket, concurrent.futures) - no runtime dependencies.
-#
-# This file is only needed to build the standalone .exe:
+# mail_checker.py runtime dependency (only needed if you use --proxy-file;
+# without it, the script runs on the standard library alone):
+PySocks>=1.7.1
+
+# Only needed to build the standalone .exe:
 pyinstaller>=6.0
