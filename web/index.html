@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Mail Access Checker</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-dot"></span>
+        <h1>Mail Access Checker</h1>
+      </div>
+      <div id="statusPill" class="pill pill-idle">Ожидание</div>
+    </header>
+
+    <main class="layout">
+      <section class="panel config-panel">
+        <h2>Настройки проверки</h2>
+
+        <div class="field">
+          <label>Файлы с аккаунтами (email:pass)</label>
+          <div class="row">
+            <button id="pickInputsBtn" class="btn btn-secondary" type="button">Выбрать файлы…</button>
+            <span id="inputsCount" class="hint">файлы не выбраны</span>
+          </div>
+          <ul id="inputsList" class="chip-list"></ul>
+        </div>
+
+        <div class="field-grid">
+          <div class="field">
+            <label for="protocol">Протокол</label>
+            <select id="protocol">
+              <option value="imap" selected>IMAP</option>
+              <option value="smtp">SMTP</option>
+              <option value="both">IMAP + SMTP</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="threads">Потоки</label>
+            <input id="threads" type="number" min="1" max="100" value="20" />
+          </div>
+          <div class="field">
+            <label for="timeout">Таймаут, сек</label>
+            <input id="timeout" type="number" min="5" max="120" value="20" />
+          </div>
+          <div class="field">
+            <label for="proxyRetries">Повторы при ошибке сети</label>
+            <input id="proxyRetries" type="number" min="1" max="10" value="2" />
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Список прокси (необязательно)</label>
+          <div class="row">
+            <button id="pickProxyBtn" class="btn btn-secondary" type="button">Выбрать файл…</button>
+            <span id="proxyFileLabel" class="hint">не выбран — прямое подключение</span>
+            <button id="clearProxyBtn" class="btn btn-ghost" type="button" hidden>Убрать</button>
+          </div>
+          <p class="note">
+            Прокси используются, чтобы распределить нагрузку по разным IP и не словить
+            временный rate-limit от провайдера при проверке большого количества почт.
+            Форматы: <code>host:port</code>, <code>host:port:user:pass</code>,
+            <code>user:pass:host:port</code>, <code>socks4://</code>, <code>socks5://user:pass@host:port</code>,
+            <code>http(s)://user:pass@host:port</code>.
+          </p>
+        </div>
+
+        <div class="actions">
+          <button id="startBtn" class="btn btn-primary" type="button" disabled>Запустить проверку</button>
+          <button id="stopBtn" class="btn btn-danger" type="button" hidden>Остановить</button>
+        </div>
+      </section>
+
+      <section class="panel results-panel">
+        <h2>Ход проверки</h2>
+
+        <div class="progress-wrap">
+          <div class="progress-bar">
+            <div id="progressFill" class="progress-fill"></div>
+          </div>
+          <div id="progressLabel" class="progress-label">0 / 0</div>
+        </div>
+
+        <div class="stats">
+          <div class="stat stat-success">
+            <span id="statSuccess" class="stat-num">0</span>
+            <span class="stat-name">success</span>
+          </div>
+          <div class="stat stat-invalid">
+            <span id="statInvalid" class="stat-num">0</span>
+            <span class="stat-name">invalid</span>
+          </div>
+          <div class="stat stat-error">
+            <span id="statError" class="stat-num">0</span>
+            <span class="stat-name">error</span>
+          </div>
+        </div>
+
+        <div class="log-header">
+          <span>Лог</span>
+          <span id="outputDirLabel" class="hint"></span>
+        </div>
+        <div id="log" class="log"></div>
+
+        <div id="doneActions" class="actions" hidden>
+          <button id="openFolderBtn" class="btn btn-secondary" type="button">Открыть папку с результатами</button>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      Только для аккаунтов, которыми вы владеете или на проверку которых у вас есть право.
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

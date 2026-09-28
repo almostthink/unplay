@@ -1,6 +1,9 @@
 # mail_checker.py runtime dependency (only needed if you use --proxy-file;
-# without it, the script runs on the standard library alone):
+# without it, the CLI script runs on the standard library alone):
 PySocks>=1.7.1
 
-# Only needed to build the standalone .exe:
+# gui.py runtime dependency - the desktop window (HTML/CSS front end):
+pywebview>=4.4
+
+# Only needed to build the standalone .exe files:
 pyinstaller>=6.0

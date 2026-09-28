@@ -5,6 +5,8 @@ on:
     branches: [ "**" ]
     paths:
       - "mail_checker.py"
+      - "gui.py"
+      - "web/**"
       - "requirements.txt"
       - ".github/workflows/build-exe.yml"
   workflow_dispatch: {}
@@ -22,10 +24,19 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Build single-file exe
+      - name: Build GUI exe (HTML/CSS front end)
+        run: pyinstaller --onefile --windowed --name mail_checker_gui --add-data "web;web" gui.py
+
+      - name: Build console/CLI exe
         run: pyinstaller --onefile --console --name mail_checker mail_checker.py
 
-      - name: Upload exe artifact
+      - name: Upload GUI exe artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mail_checker_gui-windows-exe
+          path: dist/mail_checker_gui.exe
+
+      - name: Upload CLI exe artifact
         uses: actions/upload-artifact@v4
         with:
           name: mail_checker-windows-exe
