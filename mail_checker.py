@@ -404,7 +404,7 @@ def check_account(account: Account, protocol: str, timeout: int, proxy_pool: Pro
     return last
 
 
-def main():
+def build_arg_parser():
     ap = argparse.ArgumentParser(description="Check IMAP/SMTP access for your own email accounts.")
     ap.add_argument("--input", action="append", required=True, help="Input file (email:pass per line). Repeatable.")
     ap.add_argument("--protocol", choices=["imap", "smtp", "both"], default="imap")
@@ -415,8 +415,58 @@ def main():
                      help="Optional proxy list (one per line). Omit for direct connections.")
     ap.add_argument("--proxy-retries", type=int, default=2,
                      help="Max attempts per account on connection/network errors, rotating proxies (default 2)")
-    args = ap.parse_args()
+    return ap
 
+
+def prompt_for_args():
+    """Interactive fallback for when the .exe is double-clicked with no
+    command-line arguments, instead of an instant argparse error that
+    closes the console window before it can be read."""
+    print("=" * 60)
+    print(" Mail Access Checker - interactive mode")
+    print(" (no command-line arguments were given)")
+    print("=" * 60)
+
+    inputs = []
+    while True:
+        raw = input("Path to accounts file (email:pass per line): ").strip().strip('"')
+        if not raw:
+            print("  A file path is required.")
+            continue
+        if not Path(raw).is_file():
+            print(f"  File not found: {raw}")
+            continue
+        inputs.append(raw)
+        more = input("Add another input file? [y/N]: ").strip().lower()
+        if more != "y":
+            break
+
+    protocol = input("Protocol [imap/smtp/both] (default imap): ").strip().lower() or "imap"
+    if protocol not in ("imap", "smtp", "both"):
+        protocol = "imap"
+
+    threads_raw = input("Threads (default 20): ").strip()
+    threads = int(threads_raw) if threads_raw.isdigit() else 20
+
+    timeout_raw = input("Timeout seconds (default 20): ").strip()
+    timeout = int(timeout_raw) if timeout_raw.isdigit() else 20
+
+    proxy_file = input("Proxy list file (optional, press Enter to skip): ").strip().strip('"') or None
+    if proxy_file and not Path(proxy_file).is_file():
+        print(f"  Proxy file not found, continuing without proxies: {proxy_file}")
+        proxy_file = None
+
+    argv = []
+    for path in inputs:
+        argv += ["--input", path]
+    argv += ["--protocol", protocol, "--threads", str(threads), "--timeout", str(timeout)]
+    if proxy_file:
+        argv += ["--proxy-file", proxy_file]
+
+    return build_arg_parser().parse_args(argv)
+
+
+def run(args):
     threads = max(1, min(100, args.threads))
     timeout = max(5, min(120, args.timeout))
     proxy_retries = max(1, min(10, args.proxy_retries))
@@ -483,6 +533,32 @@ def main():
     print(f"    invalid: {counters.invalid}")
     print(f"    error:   {counters.error}")
     print(f"    results: {run_dir}")
+
+
+def main():
+    # Double-clicking the .exe on Windows launches it with no arguments.
+    # argparse would then print a "the following arguments are required"
+    # error and exit immediately, closing the console window before
+    # anyone can read it. Fall back to an interactive prompt instead.
+    interactive = len(sys.argv) == 1
+
+    try:
+        if interactive:
+            args = prompt_for_args()
+        else:
+            args = build_arg_parser().parse_args()
+        run(args)
+    except KeyboardInterrupt:
+        print("\n[!] Interrupted by user.")
+    except SystemExit:
+        raise
+    except Exception:
+        import traceback
+        print("\n[!] Unexpected error:", file=sys.stderr)
+        traceback.print_exc()
+    finally:
+        if interactive:
+            input("\nPress Enter to exit...")
 
 
 if __name__ == "__main__":
