@@ -5,6 +5,7 @@ on:
     branches: [ "**" ]
     paths:
       - "mail_checker.py"
+      - "mailbox_manager.py"
       - "gui.py"
       - "web/**"
       - "requirements.txt"

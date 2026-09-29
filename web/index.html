@@ -13,10 +13,14 @@
         <span class="brand-dot"></span>
         <h1>Mail Access Checker</h1>
       </div>
+      <nav class="tabs">
+        <button id="tabCheckBtn" class="tab-btn tab-active" type="button">Проверка</button>
+        <button id="tabMailBtn" class="tab-btn" type="button">Почта</button>
+      </nav>
       <div id="statusPill" class="pill pill-idle">Ожидание</div>
     </header>
 
-    <main class="layout">
+    <main id="checkView" class="layout">
       <section class="panel config-panel">
         <h2>Настройки проверки</h2>
 
@@ -107,8 +111,51 @@
 
         <div id="doneActions" class="actions" hidden>
           <button id="openFolderBtn" class="btn btn-secondary" type="button">Открыть папку с результатами</button>
+          <button id="openInMailBtn" class="btn btn-primary" type="button">Открыть в разделе «Почта»</button>
         </div>
       </section>
+    </main>
+
+    <main id="mailView" class="mail-layout show-placeholder" hidden>
+      <aside class="panel mail-accounts">
+        <h2>Аккаунты</h2>
+        <div class="row">
+          <select id="runSelect"></select>
+          <button id="refreshRunsBtn" class="btn btn-ghost" type="button" title="Обновить список">↻</button>
+        </div>
+        <p id="runHint" class="hint">Нет сохранённых результатов проверки.</p>
+        <ul id="accountList" class="account-list"></ul>
+      </aside>
+
+      <aside class="panel mail-folders" id="folderPanel" hidden>
+        <h2>Папки</h2>
+        <ul id="folderList" class="folder-list"></ul>
+      </aside>
+
+      <section class="panel mail-messages" id="messagePanel" hidden>
+        <h2 id="messagePanelTitle">Письма</h2>
+        <ul id="messageList" class="message-list"></ul>
+        <button id="loadMoreBtn" class="btn btn-ghost" type="button" hidden>Загрузить ещё</button>
+      </section>
+
+      <section class="panel mail-reader" id="readerPanel" hidden>
+        <div class="reader-header">
+          <div class="reader-heading">
+            <div id="readerSubject" class="reader-subject"></div>
+            <div id="readerMeta" class="reader-meta"></div>
+          </div>
+          <div class="reader-actions">
+            <button id="toggleUnreadBtn" class="btn btn-secondary" type="button">Пометить непрочитанным</button>
+            <button id="deleteMsgBtn" class="btn btn-danger" type="button">Удалить</button>
+          </div>
+        </div>
+        <div id="readerBody" class="reader-body"></div>
+        <ul id="readerAttachments" class="attachment-list"></ul>
+      </section>
+
+      <div id="mailPlaceholder" class="mail-placeholder">
+        Выберите запуск проверки слева, затем аккаунт из списка success — откроются его папки и письма.
+      </div>
     </main>
 
     <footer class="footer">

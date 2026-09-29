@@ -43,9 +43,36 @@ python gui.py
 In the window: **"Выбрать файлы…"** to pick one or more `email:pass` text
 files, set protocol/threads/timeout, optionally pick a proxy list, then
 **"Запустить проверку"**. You get a live progress bar, running
-success/invalid/error counters, a scrolling log, and a button to open the
-results folder once it's done. **"Остановить"** stops the run early
-(results collected so far are already saved).
+success/invalid/error counters, a scrolling log, and once it's done a
+**"Открыть в разделе «Почта»"** button to go straight to managing the
+accounts that just came back `success`.
+
+## Managing mail (the "Почта" tab)
+
+Once a run has `success` accounts, switch to the **Почта** tab (or open it
+directly and pick a past run from the dropdown — every run with a non-empty
+`success.txt` shows up there, so you don't have to re-check to get back to
+an account). Click an account to log into it over IMAP and:
+
+- browse its folders
+- read messages (subject/from/date list, click one to read the body)
+- mark a message unread again
+- delete a message — moved to the account's Trash/Корзина folder when one
+  exists, permanently removed otherwise
+- download an individual attachment
+
+This is a plain IMAP mail client feature set, nothing more. On purpose, it
+does **not** include a couple of things sometimes bundled into "account
+management" tooling: exporting session cookies, or configuring silent
+auto-forwarding. Neither is something the account's actual owner needs —
+you're logged in directly — they exist elsewhere to keep access to an
+account without its owner noticing, which isn't what this is for.
+
+The mailbox viewer connects directly (no proxy) since it's for occasional
+look-in-on-my-own-inbox use, not bulk checking.
+
+**"Остановить"** on the check screen stops a run early (results collected
+so far are already saved).
 
 The GUI's front end lives in `web/` (`index.html`, `style.css`, `app.js`);
 `gui.py` is the Python side that drives the checks and pushes live updates

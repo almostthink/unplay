@@ -18,6 +18,7 @@ Build to a single Windows .exe:
 """
 
 import concurrent.futures
+import imaplib
 import json
 import os
 import subprocess
@@ -29,6 +30,7 @@ from pathlib import Path
 import webview
 
 import mail_checker as core
+from mailbox_manager import MailboxManager
 
 
 def resource_path(rel_path: str) -> str:
@@ -53,6 +55,8 @@ class Api:
         self.window = None
         self._running = False
         self._cancel_event = threading.Event()
+        self._mailbox = MailboxManager()
+        self._creds = {}   # email -> password, populated by load_run()
 
     def set_window(self, window):
         self.window = window
@@ -204,6 +208,130 @@ class Api:
         finally:
             self._running = False
 
+    # --- run history / account list --------------------------------------
+
+    def list_run_history(self):
+        results_dir = Path(base_dir()) / "results"
+        if not results_dir.is_dir():
+            return []
+        runs = []
+        for d in sorted(results_dir.iterdir(), reverse=True):
+            if not d.is_dir():
+                continue
+            success_file = d / "success.txt"
+            if not success_file.is_file():
+                continue
+            try:
+                count = sum(1 for _ in success_file.open("r", encoding="utf-8", errors="ignore"))
+            except OSError:
+                count = 0
+            if count == 0:
+                continue
+            runs.append({"runDir": str(d), "label": d.name, "successCount": count})
+        return runs[:30]
+
+    def load_run(self, run_dir):
+        p = Path(run_dir) / "success.txt"
+        if not p.is_file():
+            return {"ok": False, "error": "Файл success.txt не найден для этого запуска."}
+        emails = []
+        with p.open("r", encoding="utf-8", errors="ignore") as f:
+            for line in f:
+                line = line.strip()
+                if not line or ":" not in line:
+                    continue
+                addr, _, pw = line.partition(":")
+                if addr:
+                    self._creds[addr] = pw
+                    emails.append(addr)
+        return {"ok": True, "emails": emails}
+
+    # --- mailbox viewer ---------------------------------------------------
+
+    def _get_session(self, email_addr):
+        session = self._mailbox.get(email_addr)
+        if session is None:
+            raise RuntimeError("Почтовый ящик не открыт. Откройте его заново.")
+        return session
+
+    def open_mailbox(self, email_addr):
+        password = self._creds.get(email_addr)
+        if password is None:
+            return {"ok": False, "error": "Нет сохранённого пароля для этого адреса. Загрузите запуск заново."}
+        try:
+            session = self._mailbox.open(email_addr, password)
+            folders = [{"raw": f["raw"], "display": f["display"]} for f in session.folders]
+            return {"ok": True, "folders": folders, "hasTrash": bool(session.trash_raw)}
+        except imaplib.IMAP4.error as e:
+            return {"ok": False, "error": f"Не удалось войти: {e}"}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    def close_mailbox(self, email_addr):
+        self._mailbox.close(email_addr)
+        return True
+
+    def select_folder(self, email_addr, folder_raw):
+        try:
+            session = self._get_session(email_addr)
+            count = self._mailbox.select_folder(session, folder_raw)
+            return {"ok": True, "count": count}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    def list_messages(self, email_addr, offset, limit):
+        try:
+            session = self._get_session(email_addr)
+            messages, total = self._mailbox.list_messages(session, int(offset), int(limit))
+            return {"ok": True, "messages": messages, "total": total}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    def get_message(self, email_addr, uid):
+        try:
+            session = self._get_session(email_addr)
+            msg = self._mailbox.get_message(session, uid)
+            self._mailbox.set_seen(session, uid, True)
+            return {"ok": True, "message": msg}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    def set_message_seen(self, email_addr, uid, seen):
+        try:
+            session = self._get_session(email_addr)
+            self._mailbox.set_seen(session, uid, bool(seen))
+            return {"ok": True}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    def delete_message(self, email_addr, uid):
+        try:
+            session = self._get_session(email_addr)
+            outcome = self._mailbox.delete_message(session, uid)
+            return {"ok": True, "outcome": outcome}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    def download_attachment(self, email_addr, uid, part_index, filename):
+        try:
+            session = self._get_session(email_addr)
+            data = self._mailbox.get_attachment_bytes(session, uid, part_index)
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+        save_path = self.window.create_file_dialog(
+            webview.SAVE_DIALOG, save_filename=filename or "attachment"
+        )
+        if not save_path:
+            return {"ok": False, "error": ""}  # user cancelled, not a real error
+        target = save_path if isinstance(save_path, str) else save_path[0]
+        try:
+            with open(target, "wb") as f:
+                f.write(data)
+        except OSError as e:
+            return {"ok": False, "error": str(e)}
+        return {"ok": True, "path": target}
+
 
 def main():
     api = Api()
@@ -216,6 +344,7 @@ def main():
         min_size=(820, 600),
     )
     api.set_window(window)
+    window.events.closing += api._mailbox.close_all
     webview.start()
 
 
