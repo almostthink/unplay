@@ -25,12 +25,12 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Build GUI exe (HTML/CSS front end)
-        # --onedir (not --onefile): pywebview's WebView2 backend is more
-        # reliable this way, and --collect-all pulls in its loader/runtime
-        # files that a plain --add-data would miss and that otherwise show
-        # up as the window hanging at startup with no error.
-        run: pyinstaller --onedir --windowed --name mail_checker_gui --collect-all webview --add-data "web;web" gui.py
+      - name: Build GUI exe (HTML/CSS front end, bundled Chromium via Qt)
+        # --onedir (not --onefile): safer for a bundled QtWebEngine.
+        # --collect-all webview/PySide6 pulls in the Qt/Chromium runtime
+        # files a plain --add-data would miss, so the exe doesn't depend
+        # on the system having the Microsoft Edge WebView2 Runtime.
+        run: pyinstaller --onedir --windowed --name mail_checker_gui --collect-all webview --collect-all PySide6 --add-data "web;web" gui.py
 
       - name: Build console/CLI exe
         run: pyinstaller --onefile --console --name mail_checker mail_checker.py

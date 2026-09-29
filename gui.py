@@ -12,17 +12,17 @@ Run from source:
     pip install -r requirements.txt
     python gui.py
 
-Build for Windows (--onedir, not --onefile: pywebview's WebView2 backend
-is more reliable this way, and --collect-all pulls in its loader files
-that plain --add-data would miss):
+Build for Windows (--onedir, not --onefile - safer for a bundled Chromium):
     pyinstaller --onedir --windowed --name mail_checker_gui \
-        --collect-all webview --add-data "web;web" gui.py
+        --collect-all webview --collect-all PySide6 --add-data "web;web" gui.py
 
-Requires the Microsoft Edge WebView2 Runtime on the machine running the
-built exe (present by default on most Windows 10/11 installs since it
-ships with Edge; missing on some minimal/LTSC installs). Without it, the
-window would otherwise hang at startup with no visible error - main()
-below checks for it first and shows a clear message instead.
+Uses pywebview's Qt/QtWebEngine backend (via PySide6) instead of the
+default Windows backend, which draws through the system's Microsoft Edge
+WebView2 Runtime and hangs at startup with no visible error ("Не
+отвечает") on a machine that doesn't have it installed. QtWebEngine
+ships its own Chromium inside the app, so nothing needs to be installed
+on the target machine - the trade-off is a much larger build (Chromium
+is bundled, roughly 150-250 MB instead of ~15 MB).
 """
 
 import concurrent.futures
@@ -341,54 +341,16 @@ class Api:
         return {"ok": True, "path": target}
 
 
-_WEBVIEW2_CLIENT_GUID = r"{F3417C3F-BEF7-4029-82D7-FD224A981E58}"
-
-
-def _webview2_installed() -> bool:
-    """Best-effort check for the Microsoft Edge WebView2 Runtime, which
-    pywebview's Windows backend needs. Without it, webview.start() doesn't
-    raise a clean error - the window just never finishes initializing,
-    which Windows reports as 'Not Responding'. Checking first lets us show
-    an actual message instead of a silent hang."""
-    if not sys.platform.startswith("win"):
-        return True
-    import winreg
-
-    candidates = [
-        (winreg.HKEY_LOCAL_MACHINE, rf"SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{_WEBVIEW2_CLIENT_GUID}"),
-        (winreg.HKEY_LOCAL_MACHINE, rf"SOFTWARE\Microsoft\EdgeUpdate\Clients\{_WEBVIEW2_CLIENT_GUID}"),
-        (winreg.HKEY_CURRENT_USER, rf"SOFTWARE\Microsoft\EdgeUpdate\Clients\{_WEBVIEW2_CLIENT_GUID}"),
-    ]
-    for hive, path in candidates:
-        try:
-            with winreg.OpenKey(hive, path):
-                return True
-        except OSError:
-            continue
-    return False
-
-
-def _warn_missing_webview2():
-    message = (
-        "Не найден компонент Microsoft Edge WebView2 Runtime — без него это окно "
-        "не запускается (обычно выглядит как «Не отвечает»).\n\n"
-        "Установите WebView2 Runtime (бесплатно, от Microsoft) и запустите программу "
-        "снова:\nhttps://developer.microsoft.com/microsoft-edge/webview2/\n\n"
-        "Пока можно пользоваться mail_checker.exe (консольная версия с той же "
-        "проверкой почт, без окна)."
-    )
+def _warn_and_exit(message: str):
     try:
         import ctypes
         ctypes.windll.user32.MessageBoxW(0, message, "Mail Access Checker", 0x10)
     except Exception:
         print(message, file=sys.stderr)
+    sys.exit(1)
 
 
 def main():
-    if getattr(sys, "frozen", False) and not _webview2_installed():
-        _warn_missing_webview2()
-        sys.exit(1)
-
     api = Api()
     window = webview.create_window(
         "Mail Access Checker",
@@ -400,7 +362,21 @@ def main():
     )
     api.set_window(window)
     window.events.closing += api._mailbox.close_all
-    webview.start()
+
+    try:
+        # Force the Qt/QtWebEngine backend: it ships its own Chromium inside
+        # the app (via PySide6), so the program runs on a bare Windows
+        # install with nothing extra to download or install - unlike
+        # pywebview's default Windows backend, which draws through the
+        # system's Microsoft Edge WebView2 Runtime and silently hangs
+        # ("Не отвечает") if that component isn't present.
+        webview.start(gui="qt")
+    except Exception as e:
+        _warn_and_exit(
+            "Не удалось запустить окно (движок Qt/QtWebEngine): "
+            f"{e}\n\nПока можно пользоваться mail_checker.exe "
+            "(консольная версия с той же проверкой почт, без окна)."
+        )
 
 
 if __name__ == "__main__":

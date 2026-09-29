@@ -181,20 +181,23 @@ The GUI's dist folder is `mail_checker_gui/` (built with `--onedir`, not
 `mail_checker_gui.exe` plus its files; keep the folder together and run
 the `.exe` inside it. The CLI is still a single `mail_checker.exe`.
 
-## "Не отвечает" / the GUI window hangs at startup
+## "Не отвечает" / the GUI window used to hang at startup
 
-The GUI is drawn through Microsoft's **WebView2** control. If the WebView2
-Runtime isn't on the machine (rare on a normal, up-to-date Windows 10/11,
-more common on a minimal/LTSC install), the window used to just hang with
-no error - Task Manager calls that "Not Responding". `gui.py` now checks
-for it first and shows a message box telling you to install it from
-<https://developer.microsoft.com/microsoft-edge/webview2/> (free, from
-Microsoft) instead of hanging silently.
+Earlier builds drew the GUI through Microsoft's **WebView2** control. On a
+machine missing that component (rare on a normal, up-to-date Windows
+10/11, more common on a minimal/LTSC install), the window just hung with
+no error - Task Manager calls that "Not Responding".
+
+Fixed by switching pywebview to its **Qt/QtWebEngine backend** (via
+`PySide6`): it ships its own Chromium inside the app, so nothing needs to
+be installed on the machine running it - no WebView2 dependency at all.
+The trade-off is size: the GUI build went from ~15 MB to roughly
+150-250 MB, since it now carries its own browser engine instead of
+borrowing the one already on the system.
 
 If it's genuinely just slow on first launch (antivirus scanning a fresh
-unsigned exe, cold disk cache), give it up to a minute before assuming it's
-stuck. While sorting a GUI issue out, `mail_checker.exe` (the console
-build) has the same checking logic and isn't affected, since it doesn't
-use WebView2 at all.
+unsigned exe, cold disk cache), give it up to a minute before assuming
+it's stuck. `mail_checker.exe` (the console build) has the same checking
+logic and stays small, since it has no GUI/browser engine at all.
 
 ## Only use this on accounts you own or are authorized to check.

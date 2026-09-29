@@ -2,8 +2,13 @@
 # without it, the CLI script runs on the standard library alone):
 PySocks>=1.7.1
 
-# gui.py runtime dependency - the desktop window (HTML/CSS front end):
+# gui.py runtime dependencies - the desktop window (HTML/CSS front end):
 pywebview>=4.4
+# QtWebEngine backend for pywebview: ships its own Chromium inside the
+# app, so the built exe doesn't need the Microsoft Edge WebView2 Runtime
+# installed on the machine that runs it. Large (~150-250 MB installed),
+# but that's the cost of not depending on a system component.
+PySide6>=6.5
 
 # Only needed to build the standalone .exe files:
 pyinstaller>=6.0
