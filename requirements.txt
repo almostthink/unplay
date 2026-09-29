@@ -2,13 +2,19 @@
 # without it, the CLI script runs on the standard library alone):
 PySocks>=1.7.1
 
-# gui.py runtime dependencies - the desktop window (HTML/CSS front end):
-pywebview>=4.4
-# QtWebEngine backend for pywebview: ships its own Chromium inside the
-# app, so the built exe doesn't need the Microsoft Edge WebView2 Runtime
-# installed on the machine that runs it. Large (~150-250 MB installed),
-# but that's the cost of not depending on a system component.
-PySide6>=6.5
+# gui.py runtime dependencies - a local server serving the HTML/CSS/JS
+# front end in web/, opened in the machine's own default browser (no
+# embedded browser engine, so no WebView2/Chromium-bundling dependency
+# at all - see gui.py's module docstring for why):
+fastapi>=0.115
+# [standard] pulls in websockets + httptools, which the live progress feed
+# and faster HTTP parsing need - PyInstaller can't see them without the
+# packages actually being installed.
+uvicorn[standard]>=0.34
+# tkinter (native file/save dialogs) is part of the Python standard
+# library on Windows/macOS - nothing to install for it. On some minimal
+# Linux distros it's a separate OS package (e.g. apt install python3-tk),
+# not relevant for the Windows build.
 
 # Only needed to build the standalone .exe files:
 pyinstaller>=6.0

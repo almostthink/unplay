@@ -25,12 +25,25 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Build GUI exe (HTML/CSS front end, bundled Chromium via Qt)
-        # --onedir (not --onefile): safer for a bundled QtWebEngine.
-        # --collect-all webview/PySide6 pulls in the Qt/Chromium runtime
-        # files a plain --add-data would miss, so the exe doesn't depend
-        # on the system having the Microsoft Edge WebView2 Runtime.
-        run: pyinstaller --onedir --windowed --name mail_checker_gui --collect-all webview --collect-all PySide6 --add-data "web;web" gui.py
+      - name: Build GUI exe (local server + system browser, no embedded engine)
+        # uvicorn resolves its workers/protocols by name at runtime, which
+        # PyInstaller's static import scan can't see - without these
+        # --hidden-import flags the built exe starts and then immediately
+        # crashes with ModuleNotFoundError the moment a request comes in.
+        run: >
+          pyinstaller --onefile --console --name mail_checker_gui
+          --add-data "web;web"
+          --hidden-import uvicorn.logging
+          --hidden-import uvicorn.loops
+          --hidden-import uvicorn.loops.auto
+          --hidden-import uvicorn.protocols
+          --hidden-import uvicorn.protocols.http
+          --hidden-import uvicorn.protocols.http.auto
+          --hidden-import uvicorn.protocols.websockets
+          --hidden-import uvicorn.protocols.websockets.auto
+          --hidden-import uvicorn.lifespan
+          --hidden-import uvicorn.lifespan.on
+          gui.py
 
       - name: Build console/CLI exe
         run: pyinstaller --onefile --console --name mail_checker mail_checker.py
@@ -39,7 +52,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: mail_checker_gui-windows-exe
-          path: dist/mail_checker_gui/
+          path: dist/mail_checker_gui.exe
 
       - name: Upload CLI exe artifact
         uses: actions/upload-artifact@v4

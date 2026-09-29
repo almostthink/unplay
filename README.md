@@ -7,10 +7,10 @@ and don't want to log into each one by hand to confirm it still works.
 
 Two ways to run it, same checking logic underneath:
 
-- **`gui.py`** — a desktop window with an HTML/CSS/JS interface (via
-  [pywebview](https://pywebview.flowrl.com/)): pick files, set options,
-  watch live progress and counters, no terminal needed. This is the one
-  most people want.
+- **`gui.py`** — an HTML/CSS/JS interface: it starts a small local server
+  and opens it in your regular browser (Chrome, Edge, Firefox, whatever's
+  default). Pick files, set options, watch live progress, then manage the
+  accounts that came back working. This is the one most people want.
 - **`mail_checker.py`** — the same checks from the command line (or an
   interactive prompt if you just double-click the exe), useful for
   scripting/automation.
@@ -40,12 +40,29 @@ pip install -r requirements.txt
 python gui.py
 ```
 
-In the window: **"Выбрать файлы…"** to pick one or more `email:pass` text
-files, set protocol/threads/timeout, optionally pick a proxy list, then
-**"Запустить проверку"**. You get a live progress bar, running
-success/invalid/error counters, a scrolling log, and once it's done a
-**"Открыть в разделе «Почта»"** button to go straight to managing the
-accounts that just came back `success`.
+This starts a local server on `127.0.0.1` (never reachable from outside
+your machine) and opens it in your default browser. There's no separate
+window to install or wait on - it's a normal browser tab. A console stays
+open behind it showing the address and any startup errors; closing that
+console (or Ctrl+C) stops the server.
+
+In the page: **"Выбрать файлы…"** opens a native file picker to choose one
+or more `email:pass` text files, set protocol/threads/timeout, optionally
+pick a proxy list, then **"Запустить проверку"**. You get a live progress
+bar, running success/invalid/error counters, a scrolling log, and once
+it's done a **"Открыть в разделе «Почта»"** button to go straight to
+managing the accounts that just came back `success`.
+
+### Why a local server + your own browser, not an embedded window
+
+An earlier version embedded a browser window directly in the app
+(pywebview). That either depends on a system component that isn't always
+present (Microsoft Edge WebView2 - missing it made the window hang at
+startup with no error, "Не отвечает") or has to bundle an entire Chromium
+itself (~150-250 MB, just to draw one window). Opening the browser you
+already have avoids both: the exe carries no browser engine of its own,
+so it stays small and works on any machine with any browser already
+installed on it - the same reasoning `mail_checker_gui.exe` uses now.
 
 ## Managing mail (the "Почта" tab)
 
@@ -59,7 +76,7 @@ an account). Click an account to log into it over IMAP and:
 - mark a message unread again
 - delete a message — moved to the account's Trash/Корзина folder when one
   exists, permanently removed otherwise
-- download an individual attachment
+- download an individual attachment (through a native "Save as" dialog)
 
 This is a plain IMAP mail client feature set, nothing more. On purpose, it
 does **not** include a couple of things sometimes bundled into "account
@@ -74,9 +91,9 @@ look-in-on-my-own-inbox use, not bulk checking.
 **"Остановить"** on the check screen stops a run early (results collected
 so far are already saved).
 
-The GUI's front end lives in `web/` (`index.html`, `style.css`, `app.js`);
-`gui.py` is the Python side that drives the checks and pushes live updates
-into the page. It's plain HTML/CSS/JS in a native window, not a browser tab.
+The front end lives in `web/` (`index.html`, `style.css`, `app.js`) and
+talks to `gui.py` over a small local HTTP API plus a WebSocket for live
+progress updates - plain HTML/CSS/JS, no framework.
 
 ## Proxy support
 
@@ -165,39 +182,34 @@ Python/GUI files, and can also be triggered manually from the **Actions**
 tab (`workflow_dispatch`). Download from a completed run:
 
 - **`mail_checker_gui-windows-exe`** → `mail_checker_gui.exe` — the GUI
+  (opens in your browser)
 - **`mail_checker-windows-exe`** → `mail_checker.exe` — the CLI
+
+Both are single files now (~15-25 MB each) - no embedded browser engine,
+so no separate folder to keep together and no heavyweight download.
 
 To build them yourself locally on Windows:
 
 ```powershell
 pip install -r requirements.txt
-pyinstaller --onefile --windowed --name mail_checker_gui --add-data "web;web" gui.py
+pyinstaller --onefile --console --name mail_checker_gui --add-data "web;web" ^
+    --hidden-import uvicorn.logging --hidden-import uvicorn.loops ^
+    --hidden-import uvicorn.loops.auto --hidden-import uvicorn.protocols ^
+    --hidden-import uvicorn.protocols.http --hidden-import uvicorn.protocols.http.auto ^
+    --hidden-import uvicorn.protocols.websockets --hidden-import uvicorn.protocols.websockets.auto ^
+    --hidden-import uvicorn.lifespan --hidden-import uvicorn.lifespan.on ^
+    gui.py
 pyinstaller --onefile --console --name mail_checker mail_checker.py
 # -> dist\mail_checker_gui.exe and dist\mail_checker.exe
 ```
 
-The GUI's dist folder is `mail_checker_gui/` (built with `--onedir`, not
-`--onefile` - more reliable for pywebview on Windows), containing
-`mail_checker_gui.exe` plus its files; keep the folder together and run
-the `.exe` inside it. The CLI is still a single `mail_checker.exe`.
+The `--hidden-import` flags exist because uvicorn resolves its
+workers/protocols by name at runtime - PyInstaller's static analysis can't
+see those imports on its own, and without the flags the built exe starts
+and then crashes on the first request with `ModuleNotFoundError`.
 
-## "Не отвечает" / the GUI window used to hang at startup
-
-Earlier builds drew the GUI through Microsoft's **WebView2** control. On a
-machine missing that component (rare on a normal, up-to-date Windows
-10/11, more common on a minimal/LTSC install), the window just hung with
-no error - Task Manager calls that "Not Responding".
-
-Fixed by switching pywebview to its **Qt/QtWebEngine backend** (via
-`PySide6`): it ships its own Chromium inside the app, so nothing needs to
-be installed on the machine running it - no WebView2 dependency at all.
-The trade-off is size: the GUI build went from ~15 MB to roughly
-150-250 MB, since it now carries its own browser engine instead of
-borrowing the one already on the system.
-
-If it's genuinely just slow on first launch (antivirus scanning a fresh
-unsigned exe, cold disk cache), give it up to a minute before assuming
-it's stuck. `mail_checker.exe` (the console build) has the same checking
-logic and stays small, since it has no GUI/browser engine at all.
+A console window stays open behind the browser tab on purpose (same as
+the CLI build): if something fails to start, the address and the actual
+error are visible there instead of a window just vanishing.
 
 ## Only use this on accounts you own or are authorized to check.

@@ -12,6 +12,40 @@ const state = {
 
 const el = (id) => document.getElementById(id);
 
+// --- Bridge to the local backend (fetch for calls, WebSocket for live events) ---
+
+async function callApi(name, payload) {
+  const res = await fetch(`/api/${name}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload === undefined ? {} : payload),
+  });
+  return res.json();
+}
+
+async function getApi(name) {
+  const res = await fetch(`/api/${name}`);
+  return res.json();
+}
+
+function connectWebSocket() {
+  const proto = location.protocol === "https:" ? "wss:" : "ws:";
+  const ws = new WebSocket(`${proto}//${location.host}/ws`);
+  ws.onmessage = (ev) => {
+    let msg;
+    try {
+      msg = JSON.parse(ev.data);
+    } catch {
+      return;
+    }
+    const handler = window[msg.type];
+    if (typeof handler === "function") handler(msg.data);
+  };
+  ws.onclose = () => {
+    setTimeout(connectWebSocket, 1000);
+  };
+}
+
 function refreshInputsUI() {
   const list = el("inputsList");
   list.innerHTML = "";
@@ -71,7 +105,7 @@ function updateProgress() {
   el("statError").textContent = state.counters.error;
 }
 
-// --- Callbacks invoked from the Python backend via window.evaluate_js ---
+// --- Callbacks invoked from the Python backend over the WebSocket ---
 
 window.onStart = function (data) {
   state.total = data.total;
@@ -128,7 +162,7 @@ window.onFatalError = function (message) {
 
 function wire() {
   el("pickInputsBtn").addEventListener("click", async () => {
-    const paths = await window.pywebview.api.pick_input_files();
+    const paths = await callApi("pick_input_files");
     if (paths && paths.length) {
       const set = new Set(state.inputs);
       paths.forEach((p) => set.add(p));
@@ -138,7 +172,7 @@ function wire() {
   });
 
   el("pickProxyBtn").addEventListener("click", async () => {
-    const path = await window.pywebview.api.pick_proxy_file();
+    const path = await callApi("pick_proxy_file");
     if (path) {
       state.proxyFile = path;
       refreshProxyUI();
@@ -167,7 +201,7 @@ function wire() {
       proxy_file: state.proxyFile,
     };
 
-    const res = await window.pywebview.api.start_check(config);
+    const res = await callApi("start_check", config);
     if (!res || !res.ok) {
       window.onFatalError((res && res.error) || "Не удалось запустить проверку.");
     }
@@ -175,13 +209,13 @@ function wire() {
 
   el("stopBtn").addEventListener("click", async () => {
     el("stopBtn").disabled = true;
-    await window.pywebview.api.cancel_check();
+    await callApi("cancel_check");
     el("stopBtn").disabled = false;
   });
 
   el("openFolderBtn").addEventListener("click", async () => {
     if (state.outputDir) {
-      await window.pywebview.api.open_folder(state.outputDir);
+      await callApi("open_folder", { path: state.outputDir });
     }
   });
 
@@ -236,7 +270,7 @@ function setMailPlaceholder(show) {
 }
 
 async function loadHistory(preferRunDir) {
-  const runs = await window.pywebview.api.list_run_history();
+  const runs = await getApi("list_run_history");
   mail.runs = runs || [];
   const select = el("runSelect");
   select.innerHTML = "";
@@ -263,7 +297,7 @@ async function loadSelectedRun() {
   const runDir = el("runSelect").value;
   if (!runDir) return;
   mail.currentRunDir = runDir;
-  const res = await window.pywebview.api.load_run(runDir);
+  const res = await callApi("load_run", { run_dir: runDir });
   if (!res || !res.ok) {
     el("accountList").innerHTML = "";
     return;
@@ -290,7 +324,7 @@ async function openAccount(addr, liEl) {
   el("messagePanel").hidden = true;
   setMailPlaceholder(true);
 
-  const res = await window.pywebview.api.open_mailbox(addr);
+  const res = await callApi("open_mailbox", { email: addr });
   if (!res || !res.ok) {
     setMailPlaceholder(false);
     alert((res && res.error) || "Не удалось открыть почтовый ящик.");
@@ -322,7 +356,7 @@ async function openFolder(folderRaw, liEl) {
   if (liEl) liEl.classList.add("active");
 
   closeReader();
-  const res = await window.pywebview.api.select_folder(mail.currentEmail, folderRaw);
+  const res = await callApi("select_folder", { email: mail.currentEmail, folder_raw: folderRaw });
   if (!res || !res.ok) {
     alert((res && res.error) || "Не удалось открыть папку.");
     return;
@@ -342,7 +376,11 @@ async function loadMessages(reset) {
     mail.messages = [];
     el("messageList").innerHTML = "";
   }
-  const res = await window.pywebview.api.list_messages(mail.currentEmail, mail.offset, mail.pageSize);
+  const res = await callApi("list_messages", {
+    email: mail.currentEmail,
+    offset: mail.offset,
+    limit: mail.pageSize,
+  });
   if (!res || !res.ok) {
     alert((res && res.error) || "Не удалось загрузить письма.");
     return;
@@ -379,7 +417,7 @@ async function openMessage(uid, liEl) {
     liEl.classList.add("active");
     liEl.classList.remove("unread");
   }
-  const res = await window.pywebview.api.get_message(mail.currentEmail, uid);
+  const res = await callApi("get_message", { email: mail.currentEmail, uid });
   if (!res || !res.ok) {
     alert((res && res.error) || "Не удалось открыть письмо.");
     return;
@@ -400,7 +438,12 @@ async function openMessage(uid, liEl) {
     btn.className = "btn btn-ghost";
     btn.textContent = "Скачать";
     btn.addEventListener("click", async () => {
-      const r = await window.pywebview.api.download_attachment(mail.currentEmail, uid, a.index, a.filename);
+      const r = await callApi("download_attachment", {
+        email: mail.currentEmail,
+        uid,
+        part_index: a.index,
+        filename: a.filename,
+      });
       if (r && !r.ok && r.error) alert(r.error);
     });
     li.appendChild(btn);
@@ -412,7 +455,7 @@ async function openMessage(uid, liEl) {
 
 async function toggleUnread() {
   if (!mail.currentUid) return;
-  await window.pywebview.api.set_message_seen(mail.currentEmail, mail.currentUid, false);
+  await callApi("set_message_seen", { email: mail.currentEmail, uid: mail.currentUid, seen: false });
   const li = document.querySelector(`#messageList li[data-uid="${mail.currentUid}"]`);
   if (li) li.classList.add("unread");
   closeReader();
@@ -421,7 +464,7 @@ async function toggleUnread() {
 async function deleteCurrentMessage() {
   if (!mail.currentUid) return;
   if (!confirm("Удалить это письмо?")) return;
-  const res = await window.pywebview.api.delete_message(mail.currentEmail, mail.currentUid);
+  const res = await callApi("delete_message", { email: mail.currentEmail, uid: mail.currentUid });
   if (!res || !res.ok) {
     alert((res && res.error) || "Не удалось удалить письмо.");
     return;
@@ -437,8 +480,5 @@ function escapeHtml(s) {
   return div.innerHTML;
 }
 
-if (window.pywebview) {
-  wire();
-} else {
-  window.addEventListener("pywebviewready", wire);
-}
+connectWebSocket();
+wire();
