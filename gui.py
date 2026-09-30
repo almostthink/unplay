@@ -366,7 +366,12 @@ class Bridge:
         try:
             session = self._mailbox.open(email_addr, password)
             folders = [{"raw": f["raw"], "display": f["display"]} for f in session.folders]
-            return {"ok": True, "folders": folders, "hasTrash": bool(session.trash_raw)}
+            return {
+                "ok": True,
+                "folders": folders,
+                "hasTrash": bool(session.trash_raw),
+                "hasSpam": bool(session.spam_raw),
+            }
         except imaplib.IMAP4.error as e:
             return {"ok": False, "error": f"Не удалось войти: {e}"}
         except Exception as e:
@@ -413,6 +418,14 @@ class Bridge:
         try:
             session = self._get_session(email_addr)
             outcome = self._mailbox.delete_message(session, uid)
+            return {"ok": True, "outcome": outcome}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    def move_to_spam(self, email_addr, uid):
+        try:
+            session = self._get_session(email_addr)
+            outcome = self._mailbox.move_to_spam(session, uid)
             return {"ok": True, "outcome": outcome}
         except Exception as e:
             return {"ok": False, "error": str(e)}
@@ -514,6 +527,11 @@ def create_app(bridge: Bridge) -> FastAPI:
     async def api_delete_message(request: Request):
         body = await _body(request)
         return bridge.delete_message(body.get("email"), body.get("uid"))
+
+    @app.post("/api/move_to_spam")
+    async def api_move_to_spam(request: Request):
+        body = await _body(request)
+        return bridge.move_to_spam(body.get("email"), body.get("uid"))
 
     @app.post("/api/download_attachment")
     async def api_download_attachment(request: Request):

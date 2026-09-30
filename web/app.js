@@ -12,6 +12,77 @@ const state = {
 
 const el = (id) => document.getElementById(id);
 
+// --- Small inline icon set (stroke-style, 24x24 viewBox) + avatar/folder helpers ---
+
+const ICONS = {
+  inbox: '<rect x="3" y="8" width="18" height="12" rx="2"></rect><polyline points="3,8 9,8 11,11 13,11 15,8 21,8"></polyline>',
+  sent: '<polygon points="3,11 21,3 13,21 11,13 3,11"></polygon>',
+  drafts: '<path d="M4 20l4-1 11-11-3-3L5 16l-1 4z"></path>',
+  trash: '<path d="M4 7h16"></path><path d="M9 7V4h6v3"></path><path d="M6 7l1 13h10l1-13"></path>',
+  spam: '<polygon points="12,3 22,20 2,20"></polygon><line x1="12" y1="9" x2="12" y2="14"></line><circle cx="12" cy="17" r="0.8" fill="currentColor" stroke="none"></circle>',
+  folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"></path>',
+  file: '<path d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"></path><polyline points="15,2 15,7 20,7"></polyline>',
+  eye: '<path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"></path><circle cx="12" cy="12" r="3"></circle>',
+  eyeOff: '<path d="M3 3l18 18"></path><path d="M10.6 5.1A11 11 0 0 1 23 12s-1.6 2.8-4.4 4.9"></path><path d="M6.6 6.6C3.7 8.4 1 12 1 12s4 7 11 7a10.4 10.4 0 0 0 4.2-.9"></path><path d="M9.5 9.5a3 3 0 0 0 4.2 4.2"></path>',
+  download: '<path d="M12 3v12"></path><polyline points="7,10 12,15 17,10"></polyline><path d="M4 19h16"></path>',
+};
+
+function svgIcon(name) {
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[name] || ICONS.folder}</svg>`;
+}
+
+function avatarInfo(seed) {
+  const s = (seed || "?").trim();
+  const m = s.match(/[A-Za-zА-Яа-яЁё0-9]/);
+  const letter = m ? m[0].toUpperCase() : "?";
+  let hash = 0;
+  for (let i = 0; i < s.length; i++) hash = (hash * 31 + s.charCodeAt(i)) >>> 0;
+  return { letter, bg: `hsl(${hash % 360} 58% 42%)` };
+}
+
+function parseFrom(raw) {
+  const s = (raw || "").trim();
+  const m = s.match(/^"?([^"<]*?)"?\s*<([^<>]+)>$/);
+  if (m) {
+    const name = m[1].trim();
+    return { name: name || m[2], email: m[2] };
+  }
+  return { name: s, email: s };
+}
+
+function folderIconName(display) {
+  const low = (display || "").toLowerCase();
+  if (low === "inbox" || low.includes("входящ")) return "inbox";
+  if (low.includes("sent") || low.includes("отправ")) return "sent";
+  if (low.includes("draft") || low.includes("черновик")) return "drafts";
+  if (low.includes("trash") || low.includes("bin") || low.includes("корзин") || low.includes("удал")) return "trash";
+  if (low.includes("spam") || low.includes("junk") || low.includes("спам") || low.includes("нежелат")) return "spam";
+  return "folder";
+}
+
+function renderSkeleton(container, rows, widths) {
+  container.innerHTML = "";
+  for (let i = 0; i < rows; i++) {
+    const li = document.createElement("li");
+    li.className = "skeleton-row";
+    const w = widths ? widths[i % widths.length] : 70;
+    li.innerHTML =
+      '<span class="skeleton-bar" style="width:24px;height:24px;border-radius:50%;flex-shrink:0;"></span>' +
+      `<span class="skeleton-bar" style="flex:1;width:${w}%;"></span>`;
+    container.appendChild(li);
+  }
+}
+
+function rowActionBtn(iconName, title, onClick, extraClass) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = `icon-btn ${extraClass || ""}`.trim();
+  btn.title = title;
+  btn.innerHTML = svgIcon(iconName);
+  btn.addEventListener("click", onClick);
+  return btn;
+}
+
 // --- Bridge to the local backend (fetch for calls, WebSocket for live events) ---
 
 async function callApi(name, payload) {
@@ -230,8 +301,13 @@ function wire() {
     await loadHistory(state.outputDir);
   });
 
+  el("toggleUnreadBtn").innerHTML = svgIcon("eyeOff");
+  el("spamMsgBtn").innerHTML = svgIcon("spam");
+  el("deleteMsgBtn").innerHTML = svgIcon("trash");
+
   el("loadMoreBtn").addEventListener("click", () => loadMessages(false));
   el("toggleUnreadBtn").addEventListener("click", () => toggleUnread());
+  el("spamMsgBtn").addEventListener("click", () => spamCurrentMessage());
   el("deleteMsgBtn").addEventListener("click", () => deleteCurrentMessage());
 
   refreshInputsUI();
@@ -297,6 +373,7 @@ async function loadSelectedRun() {
   const runDir = el("runSelect").value;
   if (!runDir) return;
   mail.currentRunDir = runDir;
+  renderSkeleton(el("accountList"), 4, [85, 70, 90, 65]);
   const res = await callApi("load_run", { run_dir: runDir });
   if (!res || !res.ok) {
     el("accountList").innerHTML = "";
@@ -307,7 +384,14 @@ async function loadSelectedRun() {
   list.innerHTML = "";
   mail.emails.forEach((addr) => {
     const li = document.createElement("li");
-    li.textContent = addr;
+    const av = avatarInfo(addr);
+    const avatarSpan = document.createElement("span");
+    avatarSpan.className = "avatar";
+    avatarSpan.style.background = av.bg;
+    avatarSpan.textContent = av.letter;
+    const label = document.createElement("span");
+    label.textContent = addr;
+    li.append(avatarSpan, label);
     li.addEventListener("click", () => openAccount(addr, li));
     list.appendChild(li);
   });
@@ -320,31 +404,33 @@ async function openAccount(addr, liEl) {
   if (liEl) liEl.classList.add("active");
 
   closeReader();
-  el("folderPanel").hidden = true;
   el("messagePanel").hidden = true;
+  el("folderPanel").hidden = false;
+  renderSkeleton(el("folderList"), 5, [55, 70, 45, 65, 50]);
   setMailPlaceholder(true);
 
   const res = await callApi("open_mailbox", { email: addr });
   if (!res || !res.ok) {
     setMailPlaceholder(false);
+    el("folderPanel").hidden = true;
     alert((res && res.error) || "Не удалось открыть почтовый ящик.");
     return;
   }
   mail.currentEmail = addr;
   mail.folders = res.folders;
+
   const list = el("folderList");
   list.innerHTML = "";
   mail.folders.forEach((f) => {
     const li = document.createElement("li");
-    li.textContent = f.display;
+    li.innerHTML = `<span class="icon-tile">${svgIcon(folderIconName(f.display))}</span><span>${escapeHtml(f.display)}</span>`;
     li.addEventListener("click", () => openFolder(f.raw, li));
     list.appendChild(li);
   });
-  el("folderPanel").hidden = false;
 
   const inbox = mail.folders.find((f) => f.display.toUpperCase() === "INBOX") || mail.folders[0];
   if (inbox) {
-    const li = Array.from(list.children)[mail.folders.indexOf(inbox)];
+    const li = list.children[mail.folders.indexOf(inbox)];
     await openFolder(inbox.raw, li);
   } else {
     setMailPlaceholder(false);
@@ -356,8 +442,14 @@ async function openFolder(folderRaw, liEl) {
   if (liEl) liEl.classList.add("active");
 
   closeReader();
+  el("messagePanel").hidden = false;
+  el("messagePanelTitle").textContent = "Письма";
+  setMailPlaceholder(false);
+  renderSkeleton(el("messageList"), 8, [80, 60, 90, 55, 75, 65, 85, 50]);
+
   const res = await callApi("select_folder", { email: mail.currentEmail, folder_raw: folderRaw });
   if (!res || !res.ok) {
+    el("messageList").innerHTML = "";
     alert((res && res.error) || "Не удалось открыть папку.");
     return;
   }
@@ -365,8 +457,6 @@ async function openFolder(folderRaw, liEl) {
   mail.offset = 0;
   mail.messages = [];
   el("messagePanelTitle").textContent = `Письма (${res.count})`;
-  el("messagePanel").hidden = false;
-  setMailPlaceholder(false);
   await loadMessages(true);
 }
 
@@ -374,34 +464,107 @@ async function loadMessages(reset) {
   if (reset) {
     mail.offset = 0;
     mail.messages = [];
-    el("messageList").innerHTML = "";
+  } else {
+    el("loadMoreBtn").textContent = "Загрузка…";
+    el("loadMoreBtn").disabled = true;
   }
+
   const res = await callApi("list_messages", {
     email: mail.currentEmail,
     offset: mail.offset,
     limit: mail.pageSize,
   });
+
+  const list = el("messageList");
+  el("loadMoreBtn").textContent = "Загрузить ещё";
+  el("loadMoreBtn").disabled = false;
+
   if (!res || !res.ok) {
+    if (reset) list.innerHTML = "";
     alert((res && res.error) || "Не удалось загрузить письма.");
     return;
   }
+
+  if (reset) list.innerHTML = "";
   mail.total = res.total;
   mail.offset += res.messages.length;
-  const list = el("messageList");
+
+  if (mail.total === 0) {
+    list.innerHTML = '<li class="hint" style="padding:10px 8px;cursor:default;">Писем нет.</li>';
+  }
   res.messages.forEach((m) => {
     mail.messages.push(m);
-    const li = document.createElement("li");
-    li.className = m.unread ? "unread" : "";
-    li.dataset.uid = m.uid;
-    li.innerHTML = `
-      <div class="msg-subject">${escapeHtml(m.subject)}</div>
-      <div class="msg-from">${escapeHtml(m.from)}</div>
-      <div class="msg-date">${escapeHtml(m.date)}</div>
-    `;
-    li.addEventListener("click", () => openMessage(m.uid, li));
-    list.appendChild(li);
+    list.appendChild(buildMessageRow(m));
   });
   el("loadMoreBtn").hidden = mail.offset >= mail.total;
+}
+
+function buildMessageRow(m) {
+  const li = document.createElement("li");
+  li.className = m.unread ? "unread" : "";
+  li.dataset.uid = m.uid;
+
+  const from = parseFrom(m.from);
+  const av = avatarInfo(from.name || from.email);
+  const avatarSpan = document.createElement("span");
+  avatarSpan.className = "avatar";
+  avatarSpan.style.background = av.bg;
+  avatarSpan.textContent = av.letter;
+
+  const body = document.createElement("div");
+  body.className = "msg-body";
+  body.innerHTML = `
+    <div class="msg-top">
+      <span class="msg-from">${escapeHtml(from.name || from.email)}</span>
+      <span class="msg-date">${escapeHtml(m.date)}</span>
+    </div>
+    <div class="msg-subject">${escapeHtml(m.subject)}</div>
+  `;
+
+  const actions = document.createElement("div");
+  actions.className = "msg-row-actions";
+
+  const eyeBtn = rowActionBtn(
+    m.unread ? "eyeOff" : "eye",
+    m.unread ? "Пометить прочитанным" : "Пометить непрочитанным",
+    async (ev) => {
+      ev.stopPropagation();
+      const nextUnread = !m.unread;
+      await callApi("set_message_seen", { email: mail.currentEmail, uid: m.uid, seen: !nextUnread });
+      m.unread = nextUnread;
+      li.className = m.unread ? "unread" : "";
+      eyeBtn.innerHTML = svgIcon(m.unread ? "eyeOff" : "eye");
+      eyeBtn.title = m.unread ? "Пометить прочитанным" : "Пометить непрочитанным";
+    }
+  );
+
+  const spamBtn = rowActionBtn("spam", "В спам", async (ev) => {
+    ev.stopPropagation();
+    const r = await callApi("move_to_spam", { email: mail.currentEmail, uid: m.uid });
+    if (!r || !r.ok) {
+      alert((r && r.error) || "Не удалось переместить в спам.");
+      return;
+    }
+    li.remove();
+    if (mail.currentUid === m.uid) closeReader();
+  }, "icon-btn-warn");
+
+  const trashBtn = rowActionBtn("trash", "Удалить", async (ev) => {
+    ev.stopPropagation();
+    if (!confirm("Удалить это письмо?")) return;
+    const r = await callApi("delete_message", { email: mail.currentEmail, uid: m.uid });
+    if (!r || !r.ok) {
+      alert((r && r.error) || "Не удалось удалить письмо.");
+      return;
+    }
+    li.remove();
+    if (mail.currentUid === m.uid) closeReader();
+  }, "icon-btn-danger");
+
+  actions.append(eyeBtn, spamBtn, trashBtn);
+  li.append(avatarSpan, body, actions);
+  li.addEventListener("click", () => openMessage(m.uid, li));
+  return li;
 }
 
 // --- Mail: reading pane --------------------------------------------------
@@ -424,8 +587,18 @@ async function openMessage(uid, liEl) {
   }
   mail.currentUid = uid;
   const m = res.message;
+  const from = parseFrom(m.from);
+  const av = avatarInfo(from.name || from.email);
+
+  const avatarEl = el("readerAvatar");
+  avatarEl.style.background = av.bg;
+  avatarEl.textContent = av.letter;
+
   el("readerSubject").textContent = m.subject;
-  el("readerMeta").textContent = `От: ${m.from}  •  Кому: ${m.to}  •  ${m.date}`;
+  const fromLabel = from.name && from.email && from.name !== from.email
+    ? `${escapeHtml(from.name)} &lt;${escapeHtml(from.email)}&gt;`
+    : escapeHtml(from.email || from.name);
+  el("readerMeta").innerHTML = `${fromLabel}<br>Кому: ${escapeHtml(m.to)} · ${escapeHtml(m.date)}`;
   el("readerBody").textContent = m.body;
 
   const attList = el("readerAttachments");
@@ -433,10 +606,15 @@ async function openMessage(uid, liEl) {
   (m.attachments || []).forEach((a) => {
     const li = document.createElement("li");
     const sizeKb = Math.max(1, Math.round(a.size / 1024));
-    li.innerHTML = `<span class="att-name">📎 ${escapeHtml(a.filename)}</span><span class="att-size">${sizeKb} КБ</span>`;
+    li.innerHTML = `
+      <span class="icon-tile">${svgIcon("file")}</span>
+      <span class="att-info"><span class="att-name">${escapeHtml(a.filename)}</span><span class="att-size">${sizeKb} КБ</span></span>
+    `;
     const btn = document.createElement("button");
-    btn.className = "btn btn-ghost";
-    btn.textContent = "Скачать";
+    btn.className = "icon-btn";
+    btn.type = "button";
+    btn.title = "Скачать";
+    btn.innerHTML = svgIcon("download");
     btn.addEventListener("click", async () => {
       const r = await callApi("download_attachment", {
         email: mail.currentEmail,
@@ -458,6 +636,18 @@ async function toggleUnread() {
   await callApi("set_message_seen", { email: mail.currentEmail, uid: mail.currentUid, seen: false });
   const li = document.querySelector(`#messageList li[data-uid="${mail.currentUid}"]`);
   if (li) li.classList.add("unread");
+  closeReader();
+}
+
+async function spamCurrentMessage() {
+  if (!mail.currentUid) return;
+  const res = await callApi("move_to_spam", { email: mail.currentEmail, uid: mail.currentUid });
+  if (!res || !res.ok) {
+    alert((res && res.error) || "Не удалось переместить в спам.");
+    return;
+  }
+  const li = document.querySelector(`#messageList li[data-uid="${mail.currentUid}"]`);
+  if (li) li.remove();
   closeReader();
 }
 

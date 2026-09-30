@@ -141,12 +141,16 @@
       <section class="panel mail-reader" id="readerPanel" hidden>
         <div class="reader-header">
           <div class="reader-heading">
-            <div id="readerSubject" class="reader-subject"></div>
-            <div id="readerMeta" class="reader-meta"></div>
+            <span id="readerAvatar" class="avatar avatar-lg"></span>
+            <div>
+              <div id="readerSubject" class="reader-subject"></div>
+              <div id="readerMeta" class="reader-meta"></div>
+            </div>
           </div>
           <div class="reader-actions">
-            <button id="toggleUnreadBtn" class="btn btn-secondary" type="button">Пометить непрочитанным</button>
-            <button id="deleteMsgBtn" class="btn btn-danger" type="button">Удалить</button>
+            <button id="toggleUnreadBtn" class="icon-btn" type="button" title="Пометить непрочитанным"></button>
+            <button id="spamMsgBtn" class="icon-btn icon-btn-warn" type="button" title="В спам"></button>
+            <button id="deleteMsgBtn" class="icon-btn icon-btn-danger" type="button" title="Удалить"></button>
           </div>
         </div>
         <div id="readerBody" class="reader-body"></div>

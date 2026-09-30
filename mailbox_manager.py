@@ -40,6 +40,10 @@ TRASH_NAME_HINTS = (
     "trash", "deleted items", "deleted messages", "bin",
     "корзина", "удал",  # covers "удалённые", "удаленные"
 )
+SPAM_NAME_HINTS = (
+    "spam", "junk", "bulk mail",
+    "спам", "нежелат",  # covers "нежелательная почта"
+)
 
 
 # --- IMAP modified UTF-7 (RFC 3501 5.1.3), used for non-ASCII folder names ---
@@ -163,6 +167,7 @@ class MailboxSession:
     lock: threading.Lock = field(default_factory=threading.Lock)
     folders: list = field(default_factory=list)   # [{raw, display, flags}]
     trash_raw: Optional[str] = None
+    spam_raw: Optional[str] = None
     selected_raw: Optional[str] = None
 
 
@@ -190,6 +195,7 @@ class MailboxManager:
         typ, data = conn.list()
         folders = []
         trash_raw = None
+        spam_raw = None
         if typ == "OK":
             for line in data:
                 parsed = parse_list_line(line)
@@ -202,9 +208,11 @@ class MailboxManager:
                 low_name = display.lower()
                 if "\\trash" in low_flags or any(h in low_name for h in TRASH_NAME_HINTS):
                     trash_raw = parsed["raw"]
+                if "\\junk" in low_flags or any(h in low_name for h in SPAM_NAME_HINTS):
+                    spam_raw = parsed["raw"]
 
         session = MailboxSession(email=email_addr, password=password, conn=conn,
-                                  folders=folders, trash_raw=trash_raw)
+                                  folders=folders, trash_raw=trash_raw, spam_raw=spam_raw)
         with self._sessions_lock:
             self._sessions[email_addr] = session
         return session
@@ -252,32 +260,47 @@ class MailboxManager:
             uids.reverse()  # newest first (UIDs increase over time)
             total = len(uids)
             page = uids[offset:offset + limit]
+            if not page:
+                return [], total
 
-            out = []
-            for uid in page:
-                typ, msg_data = session.conn.uid(
-                    "fetch", uid, "(FLAGS BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE)])"
-                )
-                if typ != "OK" or not msg_data or not isinstance(msg_data[0], tuple):
-                    continue
-                prefix, header_bytes = msg_data[0]
-                flags_match = re.search(rb"FLAGS \(([^)]*)\)", prefix)
-                flags = flags_match.group(1).decode("ascii", "replace") if flags_match else ""
-                msg = email.message_from_bytes(header_bytes)
-                date_str = msg.get("Date", "")
-                try:
-                    dt = email.utils.parsedate_to_datetime(date_str)
-                    date_display = dt.strftime("%Y-%m-%d %H:%M") if dt else date_str
-                except Exception:
-                    date_display = date_str
-                out.append({
-                    "uid": uid.decode("ascii"),
-                    "from": decode_mime_words(msg.get("From", "")),
-                    "subject": decode_mime_words(msg.get("Subject", "")) or "(без темы)",
-                    "date": date_display,
-                    "unread": "\\Seen" not in flags,
-                })
-            return out, total
+            # One batched FETCH for the whole page instead of one round trip
+            # per message - the previous per-UID loop was the main reason a
+            # page of 30 messages felt like it hung (30 sequential IMAP
+            # commands, each paying the connection's full round-trip time).
+            uid_set = ",".join(u.decode("ascii") for u in page)
+            typ, msg_data = session.conn.uid(
+                "fetch", uid_set, "(UID FLAGS BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE)])"
+            )
+            by_uid = {}
+            if typ == "OK":
+                for item in msg_data:
+                    if not isinstance(item, tuple):
+                        continue
+                    prefix, header_bytes = item
+                    uid_match = re.search(rb"UID (\d+)", prefix)
+                    if not uid_match:
+                        continue
+                    uid_str = uid_match.group(1).decode("ascii")
+                    flags_match = re.search(rb"FLAGS \(([^)]*)\)", prefix)
+                    flags = flags_match.group(1).decode("ascii", "replace") if flags_match else ""
+                    msg = email.message_from_bytes(header_bytes)
+                    date_str = msg.get("Date", "")
+                    try:
+                        dt = email.utils.parsedate_to_datetime(date_str)
+                        date_display = dt.strftime("%Y-%m-%d %H:%M") if dt else date_str
+                    except Exception:
+                        date_display = date_str
+                    by_uid[uid_str] = {
+                        "uid": uid_str,
+                        "from": decode_mime_words(msg.get("From", "")),
+                        "subject": decode_mime_words(msg.get("Subject", "")) or "(без темы)",
+                        "date": date_display,
+                        "unread": "\\Seen" not in flags,
+                    }
+
+            # Keep the newest-first order `page` already has; skip any UID
+            # the server didn't return (e.g. deleted between search/fetch).
+            return [by_uid[u.decode("ascii")] for u in page if u.decode("ascii") in by_uid], total
 
     def get_message(self, session: MailboxSession, uid: str):
         with session.lock:
@@ -370,3 +393,17 @@ class MailboxManager:
             session.conn.uid("store", uid, "+FLAGS", "(\\Deleted)")
             session.conn.expunge()
             return "deleted"
+
+    def move_to_spam(self, session: MailboxSession, uid: str) -> str:
+        """Move a message to the account's Spam/Junk folder. Raises if none
+        was found - unlike delete, there's no sane fallback (marking
+        \\Deleted would just delete it, which isn't what 'spam' asked for)."""
+        with session.lock:
+            if not session.spam_raw:
+                raise RuntimeError("У этого аккаунта не нашлась папка «Спам»/«Junk».")
+            if session.selected_raw == session.spam_raw:
+                raise RuntimeError("Письмо уже в папке «Спам».")
+            session.conn.uid("copy", uid, imap_quote(session.spam_raw))
+            session.conn.uid("store", uid, "+FLAGS", "(\\Deleted)")
+            session.conn.expunge()
+            return "spammed"

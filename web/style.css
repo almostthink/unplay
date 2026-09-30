@@ -12,6 +12,9 @@
   --invalid-bg: #fbf3df;
   --error: #d6432f;
   --error-bg: #fdecea;
+  --hover-bg: #f0f2f5;
+  --skeleton-a: #eceef2;
+  --skeleton-b: #f8f9fb;
   --radius: 10px;
   --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
   --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -322,40 +325,149 @@ input[type="number"]:focus, select:focus {
   flex: 1;
 }
 
-.account-list li, .folder-list li {
-  padding: 8px 10px;
-  border-radius: 7px;
+/* Account rows: avatar + email, same icon-row rhythm as folders */
+.account-list li {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 8px;
+  border-radius: 8px;
   font-size: 12.5px;
   cursor: pointer;
-  margin-bottom: 3px;
+  margin-bottom: 2px;
   word-break: break-all;
 }
-.account-list li:hover, .folder-list li:hover { background: #f0f2f5; }
-.account-list li.active, .folder-list li.active { background: var(--accent-dim); color: var(--accent); font-weight: 600; }
+.account-list li:hover { background: var(--hover-bg); }
+.account-list li.active { background: var(--accent-dim); color: var(--accent); font-weight: 600; }
 
-.message-list li {
-  padding: 9px 10px;
-  border-radius: 7px;
+/* Folder rows: icon in a muted tile + label, accent left bar when active */
+.folder-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 8px;
+  border-radius: 8px;
+  font-size: 12.5px;
   cursor: pointer;
-  margin-bottom: 4px;
-  border: 1px solid transparent;
+  margin-bottom: 2px;
+  border-left: 3px solid transparent;
+  word-break: break-word;
 }
-.message-list li:hover { background: #f6f7f9; }
-.message-list li.active { border-color: var(--accent); background: var(--accent-dim); }
-.message-list .msg-subject { font-size: 12.5px; font-weight: 600; }
-.message-list li.unread .msg-subject { font-weight: 700; }
-.message-list .msg-subject::before {
-  content: "";
-  display: inline-block;
-  width: 6px; height: 6px;
+.folder-list li:hover { background: var(--hover-bg); }
+.folder-list li.active {
+  background: var(--accent-dim);
+  color: var(--accent);
+  font-weight: 600;
+  border-left-color: var(--accent);
+}
+.folder-list .icon-tile { color: var(--text-dim); flex-shrink: 0; }
+.folder-list li.active .icon-tile { color: var(--accent); }
+
+.avatar {
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
-  background: var(--accent);
-  margin-right: 6px;
-  visibility: hidden;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0;
 }
-.message-list li.unread .msg-subject::before { visibility: visible; }
-.message-list .msg-from { font-size: 11.5px; color: var(--text-dim); margin-top: 2px; }
-.message-list .msg-date { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+.avatar-lg { width: 40px; height: 40px; font-size: 15px; }
+
+.icon-tile {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.icon-tile svg { width: 16px; height: 16px; }
+
+/* Message rows: avatar | subject+from+date | hover-revealed actions */
+.message-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  margin-bottom: 2px;
+  border: 1px solid transparent;
+  position: relative;
+}
+.message-list li:hover { background: var(--hover-bg); }
+.message-list li.active { border-color: var(--accent); background: var(--accent-dim); }
+
+.msg-body { flex: 1; min-width: 0; }
+.msg-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.msg-from { font-size: 12px; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.message-list li.unread .msg-from { color: var(--text); font-weight: 700; }
+.msg-date { font-size: 11px; color: var(--text-dim); flex-shrink: 0; }
+.msg-subject {
+  font-size: 12.5px;
+  color: var(--text-dim);
+  margin-top: 1px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.message-list li.unread .msg-subject { color: var(--text); font-weight: 600; }
+
+.msg-row-actions {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: none;
+  gap: 2px;
+  background: var(--panel);
+  padding-left: 6px;
+}
+.message-list li:hover .msg-row-actions { display: flex; }
+.message-list li:hover .msg-date { visibility: hidden; }
+
+.icon-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.icon-btn svg { width: 15px; height: 15px; }
+.icon-btn:hover { background: #e4e7ec; color: var(--text); }
+.icon-btn.icon-btn-danger:hover { background: var(--error-bg); color: var(--error); }
+.icon-btn.icon-btn-warn:hover { background: var(--invalid-bg); color: var(--invalid); }
+
+/* Skeleton placeholders shown while a folder/message list is loading, so a
+   slow IMAP round trip reads as "loading" instead of "stuck". */
+.skeleton-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 8px;
+  margin-bottom: 2px;
+}
+.skeleton-bar {
+  height: 10px;
+  border-radius: 5px;
+  background: linear-gradient(90deg, var(--skeleton-a) 25%, var(--skeleton-b) 50%, var(--skeleton-a) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-sweep 1.3s ease-in-out infinite;
+}
+@keyframes skeleton-sweep {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
 
 .mail-reader { overflow: hidden; }
 .reader-header {
@@ -367,9 +479,10 @@ input[type="number"]:focus, select:focus {
   border-bottom: 1px solid var(--border);
   margin-bottom: 12px;
 }
-.reader-subject { font-size: 14px; font-weight: 700; }
+.reader-heading { display: flex; align-items: flex-start; gap: 12px; min-width: 0; }
+.reader-subject { font-size: 15px; font-weight: 700; line-height: 1.3; }
 .reader-meta { font-size: 12px; color: var(--text-dim); margin-top: 4px; line-height: 1.5; }
-.reader-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.reader-actions { display: flex; gap: 4px; flex-shrink: 0; }
 .reader-body {
   flex: 1;
   overflow-y: auto;
@@ -389,15 +502,17 @@ input[type="number"]:focus, select:focus {
 }
 .attachment-list li {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: 8px;
   font-size: 12px;
-  background: #f6f7f9;
-  border-radius: 6px;
-  padding: 6px 10px;
+  background: var(--hover-bg);
+  border-radius: 8px;
+  padding: 7px 8px 7px 10px;
 }
-.attachment-list .att-name { word-break: break-all; }
-.attachment-list .att-size { color: var(--text-dim); margin-left: 8px; flex-shrink: 0; }
+.attachment-list .icon-tile { color: var(--text-dim); }
+.attachment-list .att-info { flex: 1; min-width: 0; }
+.attachment-list .att-name { word-break: break-all; display: block; }
+.attachment-list .att-size { color: var(--text-dim); font-size: 11px; }
 
 .footer {
   padding: 10px 20px;
@@ -419,6 +534,9 @@ input[type="number"]:focus, select:focus {
     --success-bg: #103224;
     --invalid-bg: #332a10;
     --error-bg: #3a1c1a;
+    --hover-bg: #232732;
+    --skeleton-a: #1f222b;
+    --skeleton-b: #2a2e3a;
   }
   input[type="number"], select { background: #12141a; color: var(--text); }
   .chip-list li { background: #12141a; }
@@ -428,6 +546,5 @@ input[type="number"]:focus, select:focus {
   .pill-idle { background: #262a34; }
   .tabs { background: #262a34; }
   .tab-btn.tab-active { background: #12141a; color: var(--text); }
-  .account-list li:hover, .folder-list li:hover, .message-list li:hover { background: #232732; }
-  .attachment-list li { background: #232732; }
+  .icon-btn:hover { background: #2e323e; }
 }
